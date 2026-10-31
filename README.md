@@ -13,7 +13,7 @@ The earlier Sites preview remains private and is not the public host. `.openai/h
 1. Clear app icon provenance and the asset audit; retain original legal notices and complete distribution license review.
 2. Sign/notarize with the owner's authorized Apple developer credentials, and require Gatekeeper acceptance before enabling the Mac download. Do not bypass macOS security.
 3. Publish an explicitly approved verified app release, checksum, and release notes. Replace the pending download section with its actual URL; test it.
-4. Confirm platform/minimum OS support with device tests. This preview only claims Apple Silicon macOS.
+4. Confirm platform/minimum OS support with device tests. Windows x64 is a tested unsigned preview; Apple Silicon macOS has local native verification but public distribution remains paused.
 5. Set approved public canonical/social metadata and remove `noindex` only when public launch is authorized.
 
 ## Evidence and artwork
@@ -25,7 +25,10 @@ The pages mark SVG and website layout/copy are original for this task. No ArtCra
 `dist/index.html` is English; `scripts/translate.py` generates `dist/tr/index.html` and rejects untranslated copy nodes. Run it after English copy changes and update the translation mapping. `dist/locale.js` resolves persisted manual TR/EN choice first, then Vercel country (TR → tr; other known country → en), then browser-language fallback. `/api/locale` reads only `x-vercel-ip-country` and returns it with `private, no-store`; application code does not read or persist IP, city, coordinates or country. The browser stores only the manual language choice. Vercel's ordinary hosting request handling remains subject to its platform policies.
 
 ## Current distribution hold
-Mac ad-hoc preview triggered an Apple verification warning. Website download is disabled pending Developer ID signing and Apple notarization. Do not treat checksum/signature integrity as Gatekeeper trust, and do not offer bypass instructions. Windows preview 0.15.0 windows-preview.1 is published. Collision tests, portable extraction/CLI, asset audit, per-user EXE install, GUI window startup and uninstall passed on the Windows runner. Interactive PDF editing was not tested. Installer is unsigned. Public EXE anonymously downloaded and SHA-256 verified: f0ce5abc1297f9cd28f3541ea677a56b047fd8423fd08f7e74663dfd940e6a9f.
+Mac ad-hoc preview triggered an Apple verification warning. Website download is disabled pending Developer ID signing and Apple notarization. Do not treat checksum/signature integrity as Gatekeeper trust, and do not offer bypass instructions. Windows preview 0.15.0 windows-preview.7 is published. Collision tests, portable extraction/CLI, asset audit, per-user EXE install, GUI window startup and uninstall passed on the Windows runner. Interactive PDF editing was not tested. Installer is unsigned. Public EXE anonymously downloaded and SHA-256 verified: 80e9e5d15b4d93ca2f4a03ef8412eac74ad429aca88417e858800674a15efb66.
 
 ## Cat artwork
 `dist/assets/cat-icon.png` is rendered from the original slim vector mark in `dist/assets/alepdf-cat.svg`, drawn for the owner on 31 October 2026 with AI coding assistance and no third-party reference art, fonts or images. It replaces the earlier round cat at the owner’s request. MIT OR Apache-2.0 distribution terms and provenance are recorded in the app source. No installed application is modified by this site.
+
+## Verified desktop update
+Windows preview 7 is built from ce2d5dac487b97c42eac8bd97066692031fbc199. Home-tool entry (4), Edit PDF (2), image replacement (3), and Drive collision (5) regression tests passed on Windows. Release build, asset gate, per-user installation, CLI, GUI startup and uninstall passed: https://github.com/themanoftalent/alepdf/actions/runs/41216770753 . Public EXE and portable ZIP downloaded anonymously and matched published SHA-256 digests. ZIP: 9d085f6991b5eec4f4503c1c988873734d305fc4e0607aeea4dae4b3deae6b13. Interactive Windows document editing has not been manually tested.
