@@ -45,10 +45,6 @@ AleClip also has companion clients for [iOS](https://github.com/themanoftalent/a
 
 Two of these apps start from established open-source projects. Their authors did the foundational work, and their licenses travel with the code.
 
-| App | Upstream project | Upstream license | Credit |
-|---|---|---|---|
-| AlePdf | PdfCraft | Apache-2.0 | Full commit history kept. See the [contributors graph](https://github.com/themanoftalent/alepdf/graphs/contributors). |
-| AleDesk | [RustDesk](https://github.com/rustdesk/rustdesk) | AGPL-3.0 | See the [RustDesk contributors](https://github.com/rustdesk/rustdesk/graphs/contributors). |
 
 If you contributed to one of these upstream projects, thank you. Open an issue if you want your name listed here.
 
