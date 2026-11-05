@@ -6,7 +6,7 @@
   }
   if (typeof module !== 'undefined') module.exports = { chooseLocale };
   if (typeof window === 'undefined') return;
-  const key = 'alepdf-language';
+  const key = 'macosuygulama-language';
   const query = new URLSearchParams(location.search).get('lang');
   let manual = query === 'tr' || query === 'en' ? query : null;
   try { if (manual) localStorage.setItem(key, manual); else manual = localStorage.getItem(key); } catch (_) {}

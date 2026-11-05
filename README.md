@@ -1,36 +1,54 @@
-# AlePdf product website
-Original responsive Turkish/English site. No build dependencies, application analytics, forms, remote fonts, or document uploads. Deploy `dist`, `api/locale.js`, and `vercel.json`. The GitHub Follow and Star links are separate and exact.
+# macOS Uygulama (macosuygulama.vercel.app)
 
-## Preview
-Run `python3 -m http.server 4173 --bind 127.0.0.1 --directory dist`. Open http://127.0.0.1:4173.
+Official website and application hub for native, open-source macOS software developed by **Mehmet Akif Çifçi** ([@themanoftalent](https://github.com/themanoftalent)).
 
-## Vercel portability
-Import this directory as a separate project, select Other framework, no install/build command, output directory `dist`. `vercel.json` records the output directory. The owner authorized the public site at https://alepdf-website.vercel.app/. No Vercel account or credentials were changed.
+Inspired by modern app showcase portals, this hub presents a curated suite of high-performance, local-first macOS tools.
 
-The earlier Sites preview remains private and is not the public host. `.openai/hosting.json` refers only to that preserved preview; omit `.openai` from Vercel deployments.
+---
 
-## Before public launch
-1. Clear app icon provenance and the asset audit; retain original legal notices and complete distribution license review.
-2. Sign/notarize with the owner's authorized Apple developer credentials, and require Gatekeeper acceptance before enabling the Mac download. Do not bypass macOS security.
-3. Publish an explicitly approved verified app release, checksum, and release notes. Replace the pending download section with its actual URL; test it.
-4. Confirm platform/minimum OS support with device tests. Windows x64 is a tested unsigned preview; Apple Silicon macOS has local native verification but public distribution remains paused.
-5. Set approved public canonical/social metadata and remove `noindex` only when public launch is authorized.
+## 🌟 Featured Applications
 
-## Evidence and artwork
-Fresh unaltered screenshots captured from installed AlePdf 0.15.0 local.20261031.a3784c39 on 2026-10-31. Document is fictional and created for this preview; source PDF is in `tools`. Screenshots show the editor and Fill & Sign, avoiding the disputed Home icon. They contain no private documents. PDF uses standard font names, no embedded proprietary fonts; screenshots reflect actual runtime rendering, not a font-licensing clearance. Website uses system font stacks without distributing font files.
+| App | Category | Tech | Key Highlights |
+|---|---|---|---|
+| **[AlePdf](https://github.com/themanoftalent/alepdf)** | PDF & Document Studio | Rust, egui | In-place editing, annotations, page organizing, form filling & digital signing. |
+| **[Temizale](https://github.com/themanoftalent/Temizale)** | System & Cleaner | Swift 6, SwiftUI | Fast cache cleaning, orphaned file scrubber, and app uninstaller (v2.2.0 DMG). |
+| **[Miknatizale](https://github.com/themanoftalent/Miknatizale)** | Window Management | Swift 6, AppKit | Pixel-perfect native window snapping, halves, thirds, and quadrants. |
+| **[RecordAle](https://github.com/themanoftalent/RecordAle)** | Screen & Video Studio | TypeScript, Motion Canvas | Studio walkthrough recording with auto-zoom, smooth cursor tracking & frames. |
+| **[Foldale](https://github.com/themanoftalent/foldale)** | File Manager | Rust, Dual-Pane | Dual-pane keyboard-driven workflow with async Rust transfer engine. |
+| **[Saklamac Pro](https://github.com/themanoftalent/saklamac)** | Menu Bar Manager | Swift 6, SwiftUI | Notch-safe status item manager with floating overflow shelf and quick search. |
+| **[AleClip](https://github.com/themanoftalent/AleClip)** | Clipboard History | Swift 6, AppKit | Fast, encrypted, local-first clipboard search and instant paste tool. |
+| **[AleCal](https://github.com/themanoftalent/AleCal)** | Menu Bar Calendar | SwiftUI | Glassmorphic calendar with 1-click Google Meet / Zoom join and live countdowns. |
+| **[AleBar](https://github.com/themanoftalent/Ale_Bar)** | Menu Bar Customizer | Swift 6 | Menu bar organizer, custom styling engine, and keyboard command palette. |
+| **[AleDesk](https://github.com/themanoftalent/AleDesk)** | Remote Desktop | Rust & C++ | Ultra-low latency, secure P2P desktop control and file transfer. |
 
-The pages mark SVG and website layout/copy are original for this task. No ArtCraft website assets were copied. App credits preserve PdfCraft / ArtCraft Team attribution; source licensing does not establish clearance of every asset. The local review ZIP is deliberately outside `dist` and is not hosted.
+---
 
-## Localization
-`dist/index.html` is English; `scripts/translate.py` generates `dist/tr/index.html` and rejects untranslated copy nodes. Run it after English copy changes and update the translation mapping. `dist/locale.js` resolves persisted manual TR/EN choice first, then Vercel country (TR → tr; other known country → en), then browser-language fallback. `/api/locale` reads only `x-vercel-ip-country` and returns it with `private, no-store`; application code does not read or persist IP, city, coordinates or country. The browser stores only the manual language choice. Vercel's ordinary hosting request handling remains subject to its platform policies.
+## 🚀 Architectural Pillars
 
-## Current distribution hold
-Mac ad-hoc preview triggered an Apple verification warning. The latest distinct-tools Mac build now has a verified Developer ID signature and secure timestamp. Website download remains disabled pending Apple notarization. Do not treat checksum/signature integrity as Gatekeeper trust, and do not offer bypass instructions. Windows preview 0.15.0 windows-preview.8 is published. Collision tests, portable extraction/CLI, asset audit, per-user EXE install, GUI window startup and uninstall passed on the Windows runner. Interactive PDF editing was not tested. Installer is unsigned. Public EXE anonymously downloaded and SHA-256 verified: 5ef1c9eaabc9cc921d17a0c914480d82fc1b7ec2ead3d2664bb0ddfbb8754369.
+1. **Native & Blazing Fast**: Engineered with Swift and Rust for Apple Silicon and Universal architectures.
+2. **Private by Default**: 100% local-first data processing. Zero tracking, compulsory accounts, or external uploads.
+3. **Authentic macOS Feel**: Seamless alignment with macOS Human Interface Guidelines.
+4. **Open Source & Free**: Fully transparent codebases available on GitHub.
+5. **Low Memory & Battery Friendly**: Low footprint background daemons.
+6. **Agent & CLI Ready**: Automation-friendly interfaces and Model Context Protocol (MCP) support.
 
-## Cat artwork
-`dist/assets/cat-icon.png` is rendered from the original slim vector mark in `dist/assets/alepdf-cat.svg`, drawn for the owner on 31 October 2026 with AI coding assistance and no third-party reference art, fonts or images. It replaces the earlier round cat at the owner’s request. MIT OR Apache-2.0 distribution terms and provenance are recorded in the app source. No installed application is modified by this site.
+---
 
-## Verified desktop update
-Windows preview 8 is built from 4a4bcd3cedcd15e9519b5b468233092e6fe7d7f1. Home-tool entry (4), Edit PDF (2), image replacement (3), and Drive collision (5) regression tests passed on Windows. Release build, asset gate, per-user installation, CLI, GUI startup and uninstall passed: https://github.com/themanoftalent/alepdf/actions/runs/41220269658 . Public EXE and portable ZIP downloaded anonymously and matched published SHA-256 digests. ZIP: e612a16f093935120d9c9703f78ea9f0fbe2f1e3729443f4b9b2f0903961e1f8. Interactive Windows document editing has not been manually tested.
+## 🛠 Local Preview
 
-Preview 8 distinguishes the adjacent Draw pencil from Fill & Sign using the existing attributed Lucide handwritten-signature icon. One additional toolbar integration test verifies EN/TR labels and activation in both light and dark themes, without document edits. Installed Mac update is separately pending safe closure of an unsaved document.
+To preview the portal locally:
+
+```sh
+python3 -m http.server 4173 --bind 127.0.0.1 --directory dist
+```
+
+Then visit `http://127.0.0.1:4173/` or `http://127.0.0.1:4173/tr/`.
+
+---
+
+## 🌐 Deployment
+
+Deployed via Vercel:
+- **Production URL**: [macosuygulama.vercel.app](https://macosuygulama.vercel.app)
+- **Framework Preset**: Other (Static)
+- **Output Directory**: `dist`

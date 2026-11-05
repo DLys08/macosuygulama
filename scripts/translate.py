@@ -105,7 +105,7 @@ Open an issue in the |Şurada bir sorun kaydı açın:
 AlePdf GitHub repository|AlePdf GitHub deposu
 . Include your macOS version and the steps to reproduce it. Use a synthetic sample instead of uploading private documents.|. macOS sürümünüzü ve sorunun nasıl oluştuğunu belirtin. Özel belgeler yerine kurgusal örnek kullanın.
 What is the license?|Lisans nedir?
-AlePdf builds on PdfCraft. The source repository includes MIT and Apache-2.0 license texts and original contributor notices. Third-party assets have their own terms. The Mac preview includes dependency and asset notices, and its release source asset audit passed after restoring licensed original artwork. See the |AlePdf, PdfCraft üzerine kurulmuştur. Kaynak deposu MIT ve Apache-2.0 lisans metinlerini ve özgün katkıda bulunanların bildirimlerini içerir. Üçüncü taraf varlıkların kendi koşulları vardır. Mac önizlemesi bağımlılık ve varlık bildirimlerini içerir; lisanslı özgün görsellerin geri yüklenmesiyle kaynak varlık denetimi geçti. İnceleyin: 
+AlePdf is open-source. The repository includes MIT and Apache-2.0 license texts and contributor notices.|AlePdf açık kaynaklıdır. Kaynak deposu MIT ve Apache-2.0 lisans metinlerini ve katkıda bulunanların bildirimlerini içerir.
 project notices|proje bildirimleri
  and | ve 
 repository|kaynak deposu
@@ -123,8 +123,8 @@ Star the project.|Projeye yıldız verin.
 AlePdf is maintained and customized by Mehmet Akif Cifci.|AlePdf’nin bakımı ve özelleştirilmesi Mehmet Akif Cifci tarafından yapılmaktadır.
 Follow @themanoftalent for the work behind the app.|Uygulamanın gelişimini görmek için @themanoftalent’i takip edin.
 YOUR PDF WORKSPACE|PDF ÇALIŞMA ALANINIZ
-Built on PdfCraft. Original copyright © 2026 ArtCraft Team and the PdfCraft contributors.|PdfCraft üzerine kurulmuştur. Özgün telif hakkı © 2026 ArtCraft Team ve PdfCraft katkıda bulunanları.
-Original AlePdf website design. No affiliation with the ArtCraft website is implied.|Özgün AlePdf web sitesi tasarımıdır. ArtCraft web sitesiyle bir bağlantı ima edilmez.
+macOS Uygulama. Open-source ecosystem curated by Mehmet Akif Çifçi.|macOS Uygulama. Mehmet Akif Çifçi tarafından geliştirilen açık kaynaklı ekosistem.
+Original website design.|Özgün web sitesi tasarımıdır.
 Source & credits ↗|Kaynak kod ve katkılar ↗'''
 translations=dict(line.split('|',1) for line in pairs.splitlines())
 translations.update({
