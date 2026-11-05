@@ -1,54 +1,102 @@
-# macOS Uygulama (macosuygulama.vercel.app)
+<div align="center">
 
-Official website and application hub for native, open-source macOS software developed by **Mehmet Akif Çifçi** ([@themanoftalent](https://github.com/themanoftalent)).
+# macOS Uygulama
 
-Inspired by modern app showcase portals, this hub presents a curated suite of high-performance, local-first macOS tools.
+Native, local-first, open-source apps for macOS.
 
----
+[Website](https://macosuygulama.vercel.app) · [Türkçe](https://macosuygulama.vercel.app/tr/) · [Report an issue](https://github.com/themanoftalent/macosuygulama/issues) · [Contribute](CONTRIBUTING.md)
 
-## 🌟 Featured Applications
+![Vercel](https://img.shields.io/badge/deployed%20on-Vercel-000?logo=vercel)
+![Platform](https://img.shields.io/badge/platform-macOS-lightgrey?logo=apple)
+![Apps](https://img.shields.io/badge/apps-9-blue)
+![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
 
-| App | Category | Tech | Key Highlights |
+</div>
+
+macOS Uygulama is the home page and download hub for a family of macOS tools built and maintained by Mehmet Akif Çifçi ([@themanoftalent](https://github.com/themanoftalent)). Every app runs on your machine, needs no account, and ships its source code on GitHub.
+
+This repository holds the website only. Each app lives in its own repository, linked below.
+
+## Apps
+
+| App | What it does | Stack | Latest | License |
+|---|---|---|---|---|
+| [AlePdf](https://github.com/themanoftalent/alepdf) | PDF editing, annotation, page organizing, form filling and signing | Rust, egui | [![release](https://img.shields.io/github/v/release/themanoftalent/alepdf?label=)](https://github.com/themanoftalent/alepdf/releases/latest) | Apache-2.0 |
+| [Temizale](https://github.com/themanoftalent/Temizale) | Cache and Trash cleaning, orphaned file scrubbing, app uninstalling | Swift 6, SwiftUI | [![release](https://img.shields.io/github/v/release/themanoftalent/Temizale?label=)](https://github.com/themanoftalent/Temizale/releases/latest) | see repo |
+| [Miknatizale](https://github.com/themanoftalent/Miknatizale) | Window snapping to halves, thirds and quadrants | Swift 6, AppKit | [![release](https://img.shields.io/github/v/release/themanoftalent/Miknatizale?label=)](https://github.com/themanoftalent/Miknatizale/releases/latest) | see repo |
+| [RecordAle](https://github.com/themanoftalent/RecordAle) | Screen recording for walkthroughs with auto zoom and cursor smoothing | TypeScript, Motion Canvas | [![release](https://img.shields.io/github/v/release/themanoftalent/RecordAle?label=)](https://github.com/themanoftalent/RecordAle/releases/latest) | see repo |
+| [Foldale](https://github.com/themanoftalent/foldale) | Dual-pane, keyboard-driven file manager | TypeScript, Rust | [![release](https://img.shields.io/github/v/release/themanoftalent/foldale?label=)](https://github.com/themanoftalent/foldale/releases/latest) | see repo |
+| [Saklamac Pro](https://github.com/themanoftalent/saklamac) | Notch-safe menu bar item manager with an overflow shelf | Swift 6, SwiftUI | source only | MIT |
+| [AleClip](https://github.com/themanoftalent/aleclip) | Clipboard history with search and instant paste | Swift 6, AppKit | [![release](https://img.shields.io/github/v/release/themanoftalent/aleclip?label=)](https://github.com/themanoftalent/aleclip/releases/latest) | see repo |
+| [AleBar](https://github.com/themanoftalent/AleBar) | Menu bar organizer, styling and command palette | Swift 6 | [![release](https://img.shields.io/github/v/release/themanoftalent/AleBar?label=)](https://github.com/themanoftalent/AleBar/releases/latest) | MIT |
+| [AleDesk](https://github.com/themanoftalent/AleDesk) | Remote desktop control and file transfer for macOS and Windows | Rust, Flutter | source only | AGPL-3.0 |
+
+AleClip also has companion clients for [iOS](https://github.com/themanoftalent/aleclip-ios), [Windows](https://github.com/themanoftalent/aleclip-windows) and [Android](https://github.com/themanoftalent/aleclip-android).
+
+## Design principles
+
+1. Native first. Swift for Apple frameworks, Rust where performance or portability matters. Builds target Apple Silicon and Intel.
+2. Local by default. Your files and clipboard stay on your Mac. No telemetry, no sign-in.
+3. Follows the macOS Human Interface Guidelines, so the apps behave like the rest of your system.
+4. Small footprint. Background helpers stay light on memory and battery.
+5. Scriptable. Where it makes sense, apps expose a CLI or a Model Context Protocol (MCP) interface.
+
+## Built on open source
+
+Two of these apps start from established open-source projects. Their authors did the foundational work, and their licenses travel with the code.
+
+| App | Upstream project | Upstream license | Credit |
 |---|---|---|---|
-| **[AlePdf](https://github.com/themanoftalent/alepdf)** | PDF & Document Studio | Rust, egui | In-place editing, annotations, page organizing, form filling & digital signing. |
-| **[Temizale](https://github.com/themanoftalent/Temizale)** | System & Cleaner | Swift 6, SwiftUI | Fast cache cleaning, orphaned file scrubber, and app uninstaller (v2.2.0 DMG). |
-| **[Miknatizale](https://github.com/themanoftalent/Miknatizale)** | Window Management | Swift 6, AppKit | Pixel-perfect native window snapping, halves, thirds, and quadrants. |
-| **[RecordAle](https://github.com/themanoftalent/RecordAle)** | Screen & Video Studio | TypeScript, Motion Canvas | Studio walkthrough recording with auto-zoom, smooth cursor tracking & frames. |
-| **[Foldale](https://github.com/themanoftalent/foldale)** | File Manager | Rust, Dual-Pane | Dual-pane keyboard-driven workflow with async Rust transfer engine. |
-| **[Saklamac Pro](https://github.com/themanoftalent/saklamac)** | Menu Bar Manager | Swift 6, SwiftUI | Notch-safe status item manager with floating overflow shelf and quick search. |
-| **[AleClip](https://github.com/themanoftalent/AleClip)** | Clipboard History | Swift 6, AppKit | Fast, encrypted, local-first clipboard search and instant paste tool. |
-| **[AleCal](https://github.com/themanoftalent/AleCal)** | Menu Bar Calendar | SwiftUI | Glassmorphic calendar with 1-click Google Meet / Zoom join and live countdowns. |
-| **[AleBar](https://github.com/themanoftalent/Ale_Bar)** | Menu Bar Customizer | Swift 6 | Menu bar organizer, custom styling engine, and keyboard command palette. |
-| **[AleDesk](https://github.com/themanoftalent/AleDesk)** | Remote Desktop | Rust & C++ | Ultra-low latency, secure P2P desktop control and file transfer. |
+| AlePdf | PdfCraft | Apache-2.0 | Full commit history kept. See the [contributors graph](https://github.com/themanoftalent/alepdf/graphs/contributors). |
+| AleDesk | [RustDesk](https://github.com/rustdesk/rustdesk) | AGPL-3.0 | See the [RustDesk contributors](https://github.com/rustdesk/rustdesk/graphs/contributors). |
 
----
+If you contributed to one of these upstream projects, thank you. Open an issue if you want your name listed here.
 
-## 🚀 Architectural Pillars
+## Repository layout
 
-1. **Native & Blazing Fast**: Engineered with Swift and Rust for Apple Silicon and Universal architectures.
-2. **Private by Default**: 100% local-first data processing. Zero tracking, compulsory accounts, or external uploads.
-3. **Authentic macOS Feel**: Seamless alignment with macOS Human Interface Guidelines.
-4. **Open Source & Free**: Fully transparent codebases available on GitHub.
-5. **Low Memory & Battery Friendly**: Low footprint background daemons.
-6. **Agent & CLI Ready**: Automation-friendly interfaces and Model Context Protocol (MCP) support.
+```
+dist/        static site (English at /, Turkish at /tr/)
+  assets/    icons, screenshots
+  locale.js  language switching
+api/         Vercel serverless functions
+scripts/     build and maintenance scripts
+tools/       helper tooling
+vercel.json  deployment config
+```
 
----
+## Run the site locally
 
-## 🛠 Local Preview
-
-To preview the portal locally:
-
-```sh
+```bash
+git clone https://github.com/themanoftalent/macosuygulama.git
+cd macosuygulama
 python3 -m http.server 4173 --bind 127.0.0.1 --directory dist
 ```
 
-Then visit `http://127.0.0.1:4173/` or `http://127.0.0.1:4173/tr/`.
+Open http://127.0.0.1:4173/ for English or http://127.0.0.1:4173/tr/ for Turkish.
 
----
+## Deployment
 
-## 🌐 Deployment
+Vercel deploys every push to `main`.
 
-Deployed via Vercel:
-- **Production URL**: [macosuygulama.vercel.app](https://macosuygulama.vercel.app)
-- **Framework Preset**: Other (Static)
-- **Output Directory**: `dist`
+| Setting | Value |
+|---|---|
+| Production URL | [macosuygulama.vercel.app](https://macosuygulama.vercel.app) |
+| Framework preset | Other (static) |
+| Output directory | `dist` |
+
+## Contributing
+
+You can help in four ways, and none of them need Swift or Rust:
+
+1. Fix a typo or improve the wording on the site, in English or Turkish.
+2. Translate the site into another language.
+3. Add screenshots or short demo GIFs for an app.
+4. Report a broken link or download.
+
+Bugs and feature requests for a specific app go to that app's repository. Read [CONTRIBUTING.md](CONTRIBUTING.md) before you open a pull request.
+
+## Author
+
+Mehmet Akif Çifçi · [GitHub](https://github.com/themanoftalent) · [ORCID](https://orcid.org/0000-0002-6439-8826)
+
+If an app saves you time, star its repository. That helps other Mac users find it.
