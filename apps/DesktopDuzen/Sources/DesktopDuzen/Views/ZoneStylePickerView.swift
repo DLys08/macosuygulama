@@ -65,31 +65,55 @@ public struct ZoneStylePickerView: View {
                     }
                 ), supportsOpacity: false)
                 Spacer()
-                Button("Use Theme Colour") {
+                Button("Reset to Theme") {
                     appState.mutateZone(id: zoneID) {
                         $0.customBackgroundHex = nil
                         $0.customBackgroundOpacity = nil
+                        $0.showBorder = true
+                        $0.showShadow = true
                     }
                 }
                 .controlSize(.small)
-                .disabled(zone.customBackgroundHex == nil && zone.customBackgroundOpacity == nil)
+                .disabled(zone.customBackgroundHex == nil && zone.customBackgroundOpacity == nil && zone.showBorder && zone.showShadow)
             }
 
             sliderRow("Opacity", value: Binding(
                 get: { zone.customBackgroundOpacity ?? ThemePresets.theme(for: zone.themeID).backgroundOpacity },
                 set: { v in appState.mutateZone(id: zoneID) { $0.customBackgroundOpacity = v } }
-            ), range: 0.35...1.0, step: 0.05, format: { "\(Int($0 * 100))%" })
+            ), range: 0.0...1.0, step: 0.05, format: { $0 <= 0.001 ? "Clear" : "\(Int(($0 * 100).rounded()))%" })
+
+            HStack(spacing: 16) {
+                Toggle("Border", isOn: Binding(get: { zone.showBorder }, set: { v in appState.mutateZone(id: zoneID) { $0.showBorder = v } }))
+                Toggle("Shadow", isOn: Binding(get: { zone.showShadow }, set: { v in appState.mutateZone(id: zoneID) { $0.showShadow = v } }))
+                Spacer()
+                Button("Fully Transparent") {
+                    appState.mutateZone(id: zoneID) {
+                        $0.customBackgroundOpacity = 0
+                        $0.showBorder = false
+                        $0.showShadow = false
+                    }
+                }
+                .controlSize(.small)
+            }
+            .font(.system(size: 11))
+
+            if palette.isClear {
+                Text("Clear mode: no fill or blur. Labels get a shadow so they stay readable on any wallpaper.")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             // Live preview of the text colours the zone will use.
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.seal.fill").foregroundColor(palette.accent)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Readable text").font(.system(size: 12, weight: .bold)).foregroundColor(palette.title)
-                    Text(String(format: "Contrast %.1f : 1", palette.primaryContrast))
+                    Text(palette.isClear ? "Shadowed labels (clear mode)" : String(format: "Contrast %.1f : 1", palette.primaryContrast))
                         .font(.system(size: 10)).foregroundColor(palette.secondary)
                 }
                 Spacer()
-                if palette.tintOpacity > (zone.customBackgroundOpacity ?? ThemePresets.theme(for: zone.themeID).backgroundOpacity) + 0.01 {
+                if !palette.isClear && palette.tintOpacity > (zone.customBackgroundOpacity ?? ThemePresets.theme(for: zone.themeID).backgroundOpacity) + 0.01 {
                     Text("Opacity raised for legibility")
                         .font(.system(size: 9)).foregroundColor(palette.secondary)
                 }

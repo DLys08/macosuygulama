@@ -33,6 +33,7 @@ Auto-sort
 
 Appearance
 - 27 themes across Liquid Glass, Classic, Gradient, Solid and Accessibility, plus a custom colour and transparency per zone.
+- Clear mode: set the background down to 0 % and turn off the border and shadow so only icons and labels float on the wallpaper. Labels get a dark halo for readability.
 - Text colour is computed from the zone's actual background (every gradient stop and the sheen) and always meets WCAG AA contrast (4.5:1) in Light and Dark Mode.
 
 Desktop behaviour
@@ -50,7 +51,7 @@ Desktop behaviour
 ## Build
 
 ```bash
-swift test                      # 45 tests; they use temporary folders only and never touch your Desktop
+swift test                      # 48 tests; they use temporary folders only and never touch your Desktop
 ./scripts/build_app.sh          # builds and signs DesktopDuzen.app (Developer ID if available, else ad-hoc)
 ./scripts/create_dmg.sh         # packages and verifies DesktopDuzen-<version>.dmg
 swift scripts/make_icon.swift Resources && iconutil -c icns Resources/AppIcon.iconset -o Resources/AppIcon.icns

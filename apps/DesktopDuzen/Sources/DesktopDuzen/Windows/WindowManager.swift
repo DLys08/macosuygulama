@@ -143,6 +143,11 @@ public final class WindowManager: ObservableObject {
             panel.minimumContentSize = NSSize(width: 220, height: zone.isCollapsed ? zone.collapsedHeight : 120)
 
             let palette = ZonePalette.forZone(zone)
+            let wantsShadow = zone.showShadow && !palette.isClear
+            if panel.hasShadow != wantsShadow {
+                panel.hasShadow = wantsShadow
+                panel.invalidateShadow()
+            }
             if controller.appliedPaletteDark != palette.isDark {
                 panel.appearance = palette.appearance
                 controller.appliedPaletteDark = palette.isDark

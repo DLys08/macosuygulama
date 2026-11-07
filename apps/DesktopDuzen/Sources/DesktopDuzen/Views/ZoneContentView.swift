@@ -24,7 +24,7 @@ public struct ZoneContentView: View {
             ZStack(alignment: .bottomTrailing) {
                 VStack(spacing: 0) {
                     ZoneHeaderView(zone: zone)
-                        .background(palette.controlFill.opacity(0.6))
+                        .background(palette.isClear ? Color.clear : palette.controlFill.opacity(0.6))
 
                     if let message = banner ?? store.lastError {
                         bannerView(message, palette: palette)
@@ -55,9 +55,11 @@ public struct ZoneContentView: View {
             .clipShape(RoundedRectangle(cornerRadius: CGFloat(palette.cornerRadius), style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: CGFloat(palette.cornerRadius), style: .continuous)
-                    .strokeBorder(isDropTargeted ? palette.accent : palette.border,
+                    .strokeBorder(isDropTargeted ? palette.accent : (palette.showBorder ? palette.border : Color.clear),
                                   lineWidth: isDropTargeted ? 2.5 : CGFloat(palette.borderWidth))
             )
+            // Clear zones: halo every label and icon so they read on any wallpaper.
+            .modifier(ClearModeHalo(active: palette.isClear))
             .environment(\.zonePalette, palette)
             .environment(\.colorScheme, palette.colorScheme)
             .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
@@ -289,6 +291,19 @@ public struct ZoneContentView: View {
 }
 
 // MARK: - Shared helpers
+
+struct ClearModeHalo: ViewModifier {
+    let active: Bool
+    func body(content: Content) -> some View {
+        if active {
+            content
+                .shadow(color: Color.black.opacity(0.9), radius: 1.0, x: 0, y: 0.5)
+                .shadow(color: Color.black.opacity(0.6), radius: 3.0, x: 0, y: 1)
+        } else {
+            content
+        }
+    }
+}
 
 public struct ZoneFileActions {
     public var open: (FileItem) -> Void

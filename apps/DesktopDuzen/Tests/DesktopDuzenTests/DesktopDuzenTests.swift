@@ -577,3 +577,30 @@ final class ThemeSafetyNetTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(p.titleContrast, 4.5)
     }
 }
+
+final class ClearModeTests: XCTestCase {
+    func testZeroOpacityIsAllowedAndUsesClearMode() {
+        var zone = ZoneModel(title: "Clear", customBackgroundOpacity: 0, showBorder: false, showShadow: false)
+        zone.sanitize()
+        XCTAssertEqual(zone.customBackgroundOpacity, 0, "0 % must survive sanitize (it was clamped to 35 % before)")
+        let p = ZonePalette.forZone(zone)
+        XCTAssertTrue(p.isClear)
+        XCTAssertEqual(p.tintOpacity, 0)
+        XCTAssertEqual(p.primaryRGB, .white)
+        XCTAssertFalse(p.showBorder)
+        XCTAssertFalse(p.glassHighlight)
+    }
+
+    func testAboveThresholdStaysContrastManaged() {
+        let p = ZonePalette.forZone(ZoneModel(title: "Solid", themeID: "liquid_clear", customBackgroundOpacity: 0.6))
+        XCTAssertFalse(p.isClear)
+        XCTAssertGreaterThanOrEqual(p.primaryContrast, 4.5)
+    }
+
+    func testOlderLayoutsDefaultToBorderAndShadow() throws {
+        let json = #"{"id":"CF747EB0-A075-43A1-A2C0-24AD5B6C2F06","title":"Old"}"#
+        let zone = try JSONDecoder().decode(ZoneModel.self, from: Data(json.utf8))
+        XCTAssertTrue(zone.showBorder)
+        XCTAssertTrue(zone.showShadow)
+    }
+}

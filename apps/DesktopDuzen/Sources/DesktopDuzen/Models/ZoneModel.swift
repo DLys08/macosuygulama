@@ -23,8 +23,12 @@ public struct ZoneModel: Identifiable, Codable, Equatable {
     public var themeID: String
     /// Optional user-chosen tint that overrides the theme background.
     public var customBackgroundHex: String?
-    /// Optional user-chosen tint opacity (0.35...1.0).
+    /// Optional user-chosen background opacity (0 = fully transparent ... 1).
     public var customBackgroundOpacity: Double?
+    /// Draw the outline around the zone.
+    public var showBorder: Bool
+    /// Draw the window drop shadow.
+    public var showShadow: Bool
     public var iconSize: Double
     public var fontSize: Double
     public var iconSpacing: Double
@@ -52,6 +56,8 @@ public struct ZoneModel: Identifiable, Codable, Equatable {
         themeID: String = "glass_blur",
         customBackgroundHex: String? = nil,
         customBackgroundOpacity: Double? = nil,
+        showBorder: Bool = true,
+        showShadow: Bool = true,
         iconSize: Double = 52.0,
         fontSize: Double = 11.5,
         iconSpacing: Double = 12.0,
@@ -78,6 +84,8 @@ public struct ZoneModel: Identifiable, Codable, Equatable {
         self.themeID = themeID
         self.customBackgroundHex = customBackgroundHex
         self.customBackgroundOpacity = customBackgroundOpacity
+        self.showBorder = showBorder
+        self.showShadow = showShadow
         self.iconSize = iconSize
         self.fontSize = fontSize
         self.iconSpacing = iconSpacing
@@ -89,7 +97,7 @@ public struct ZoneModel: Identifiable, Codable, Equatable {
         case id, type, title, frame, displayID, isCollapsed, collapsedHeight, expandedHeight
         case autoExpandOnHover, isPinnedOnTop, viewMode, sortMode, tabs, activeTabID, apps
         case backingFolderPath, securityBookmarkData, themeID, customBackgroundHex
-        case customBackgroundOpacity, iconSize, fontSize, iconSpacing, manualOrder, createdAt
+        case customBackgroundOpacity, showBorder, showShadow, iconSize, fontSize, iconSpacing, manualOrder, createdAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -115,6 +123,8 @@ public struct ZoneModel: Identifiable, Codable, Equatable {
         self.themeID = c.value(.themeID, default: "glass_blur")
         self.customBackgroundHex = c.optionalValue(.customBackgroundHex)
         self.customBackgroundOpacity = c.optionalValue(.customBackgroundOpacity)
+        self.showBorder = c.value(.showBorder, default: true)
+        self.showShadow = c.value(.showShadow, default: true)
         self.iconSize = c.value(.iconSize, default: 52.0)
         self.fontSize = c.value(.fontSize, default: 11.5)
         self.iconSpacing = c.value(.iconSpacing, default: 12.0)
@@ -138,9 +148,13 @@ public struct ZoneModel: Identifiable, Codable, Equatable {
         iconSize = min(max(iconSize, 24), 96)
         fontSize = min(max(fontSize, 9), 18)
         iconSpacing = min(max(iconSpacing, 4), 32)
-        if let opacity = customBackgroundOpacity { customBackgroundOpacity = min(max(opacity, 0.35), 1.0) }
+        if let opacity = customBackgroundOpacity { customBackgroundOpacity = min(max(opacity, 0.0), 1.0) }
         if let active = activeTabID, !tabs.contains(where: { $0.id == active }) { activeTabID = tabs.first?.id }
     }
+
+    /// Below this background opacity a zone is drawn in "clear" mode: no blur, no forced
+    /// opacity, labels get a halo so they stay readable directly on the wallpaper.
+    public static let clearModeThreshold = 0.35
 
     public var resolvedFolderPath: String {
         if type == .app { return "" }

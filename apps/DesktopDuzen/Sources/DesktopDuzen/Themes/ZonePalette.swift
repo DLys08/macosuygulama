@@ -100,6 +100,9 @@ public struct ZonePalette: Equatable {
     public var glassHighlight: Bool
     public var cornerRadius: Double
     public var borderWidth: Double
+    /// Fully or mostly transparent zone: no material, labels drawn with a readability halo.
+    public var isClear: Bool = false
+    public var showBorder: Bool = true
 
     // Approximate colours of the blur material in each appearance, with 25 % of a worst-case
     // wallpaper (white for dark material, black for light material) bleeding through.
@@ -189,8 +192,36 @@ public struct ZonePalette: Equatable {
     }
 
     public static func forZone(_ zone: ZoneModel) -> ZonePalette {
-        make(theme: ThemePresets.theme(for: zone.themeID),
-             customHex: zone.customBackgroundHex, customOpacity: zone.customBackgroundOpacity)
+        let theme = ThemePresets.theme(for: zone.themeID)
+        var p: ZonePalette
+        if let opacity = zone.customBackgroundOpacity, opacity < ZoneModel.clearModeThreshold {
+            p = clear(theme: theme, customHex: zone.customBackgroundHex, opacity: opacity)
+        } else {
+            p = make(theme: theme, customHex: zone.customBackgroundHex, customOpacity: zone.customBackgroundOpacity)
+        }
+        p.showBorder = zone.showBorder
+        return p
+    }
+
+    /// Clear mode: the zone background is (nearly) invisible, so contrast cannot come from the
+    /// fill. Text is white with a dark halo (the convention Finder uses for desktop icon labels),
+    /// which stays readable on light and dark wallpapers alike.
+    public static func clear(theme: ZoneTheme, customHex: String?, opacity: Double) -> ZonePalette {
+        let stops: [RGBAColor] = customHex.map { [RGBAColor(hex: $0)] } ?? theme.tintStops.map { RGBAColor(hex: $0) }
+        var p = make(theme: theme, customHex: customHex, customOpacity: 1.0)
+        p.isClear = true
+        p.stops = stops
+        p.tint = stops[stops.count / 2]
+        p.tintOpacity = max(0, opacity)
+        p.sheen = 0
+        p.glassHighlight = false
+        p.isDark = true
+        p.primaryRGB = .white
+        p.titleRGB = .white
+        p.accentRGB = .white
+        p.secondaryOpacity = 0.92
+        p.borderRGB = RGBAColor(r: 1, g: 1, b: 1, a: opacity <= 0.01 ? 0 : 0.35)
+        return p
     }
 
     public static let fallback = ZonePalette.make(theme: ThemePresets.glassBlur)
@@ -205,7 +236,7 @@ public struct ZonePalette: Equatable {
         LinearGradient(colors: stops.map { $0.color.opacity(tintOpacity) }, startPoint: .top, endPoint: .bottom)
     }
     public var border: Color { borderRGB.color }
-    public var controlFill: Color { primaryRGB.color.opacity(0.10) }
+    public var controlFill: Color { isClear ? Color.black.opacity(0.28) : primaryRGB.color.opacity(0.10) }
     public var controlFillStrong: Color { primaryRGB.color.opacity(0.18) }
     public var selectionFill: Color { accentRGB.color.opacity(0.28) }
     /// Appearance of the blur material; the contrast maths assumed this material.

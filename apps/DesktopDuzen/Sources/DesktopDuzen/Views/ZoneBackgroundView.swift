@@ -11,12 +11,17 @@ public struct ZoneBackgroundView: View {
     public var body: some View {
         let shape = RoundedRectangle(cornerRadius: CGFloat(palette.cornerRadius), style: .continuous)
         ZStack {
-            if preview {
+            // Near-invisible floor: a fully transparent window lets clicks and file drops fall
+            // through to the desktop, so clear zones keep a 1 % layer to stay interactive.
+            Color.black.opacity(0.012)
+            if palette.isClear {
+                palette.tintGradient
+            } else if preview {
                 (palette.isDark ? ZonePalette.darkMaterialBase : ZonePalette.lightMaterialBase).color
             } else {
                 VisualEffectBlur(material: palette.material, appearance: palette.appearance)
             }
-            palette.tintGradient
+            if !palette.isClear { palette.tintGradient }
             if palette.sheen > 0 {
                 // Specular sheen: strongest at the top, fading out by mid-height.
                 LinearGradient(stops: [
