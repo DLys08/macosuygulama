@@ -45,8 +45,10 @@ public struct ZoneListView: View {
                     }
                     .padding(.horizontal, 6)
                     .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity, minHeight: max(0, geo.size.height - 24), alignment: .top)
+                    .contentShape(Rectangle())
+                    .onTapGesture { selectedFilePaths = [] }
                 }
-                .background(Color.clear.contentShape(Rectangle()).onTapGesture { selectedFilePaths = [] })
             }
         }
     }

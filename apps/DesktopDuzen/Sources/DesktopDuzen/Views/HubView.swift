@@ -37,8 +37,12 @@ public struct HubView: View {
                             appState.areAllZonesHidden.toggle()
                         }
                         .controlSize(.small)
-                        Button("Align Grid") { appState.autoAlignAllZones() }
+                        Button("Align to Grid") { appState.alignAllZonesToGrid() }
                             .controlSize(.small)
+                            .help("Snap every zone's position and size to the desktop grid")
+                        Button("Auto-Align") { appState.autoAlignAllZones() }
+                            .controlSize(.small)
+                            .help("Arrange zones in tidy rows on each display")
                     }
 
                     if appState.zones.isEmpty {

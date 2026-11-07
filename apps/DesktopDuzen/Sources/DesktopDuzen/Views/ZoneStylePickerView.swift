@@ -129,7 +129,7 @@ public struct ZoneStylePickerView: View {
             sliderRow("Spacing", value: Binding(get: { zone.iconSpacing }, set: { v in appState.mutateZone(id: zoneID) { $0.iconSpacing = v } }),
                       range: 6...28, step: 2, format: { "\(Int($0)) px" })
             sliderRow("Font size", value: Binding(get: { zone.fontSize }, set: { v in appState.mutateZone(id: zoneID) { $0.fontSize = v } }),
-                      range: 9...16, step: 0.5, format: { String(format: "%.1f pt", $0) })
+                      range: 8...16, step: 0.5, format: { String(format: "%.1f pt", $0) })
 
             Toggle("Expand when the pointer hovers (collapsed zones)", isOn: Binding(
                 get: { zone.autoExpandOnHover },

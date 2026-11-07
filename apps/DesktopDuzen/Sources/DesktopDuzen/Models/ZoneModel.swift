@@ -146,7 +146,7 @@ public struct ZoneModel: Identifiable, Codable, Equatable {
             frame.size.height = expandedHeight
         }
         iconSize = min(max(iconSize, 24), 96)
-        fontSize = min(max(fontSize, 9), 18)
+        fontSize = min(max(fontSize, 8), 18)
         iconSpacing = min(max(iconSpacing, 4), 32)
         if let opacity = customBackgroundOpacity { customBackgroundOpacity = min(max(opacity, 0.0), 1.0) }
         if let active = activeTabID, !tabs.contains(where: { $0.id == active }) { activeTabID = tabs.first?.id }

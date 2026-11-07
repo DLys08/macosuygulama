@@ -671,3 +671,62 @@ final class WidgetSingletonTests: SandboxedTestCase {
         XCTAssertEqual(reloaded.widgets.filter { $0.type == .quickNote }.count, 2)
     }
 }
+
+final class SelectionTests: XCTestCase {
+    func testClickingTheSelectedItemAgainDeselectsIt() {
+        let a = FileItem(name: "a", url: URL(fileURLWithPath: "/t/a"))
+        let b = FileItem(name: "b", url: URL(fileURLWithPath: "/t/b"))
+        var selection = Set<String>()
+        var anchor: String?
+        FileSelection.apply(click: a, ordered: [a, b], selection: &selection, anchor: &anchor)
+        XCTAssertEqual(selection, [a.path])
+        FileSelection.apply(click: b, ordered: [a, b], selection: &selection, anchor: &anchor)
+        XCTAssertEqual(selection, [b.path], "plain click moves the selection")
+        FileSelection.apply(click: b, ordered: [a, b], selection: &selection, anchor: &anchor)
+        XCTAssertTrue(selection.isEmpty, "second click on the same item clears it")
+    }
+
+    func testEightPointTextIsAllowed() {
+        var z = ZoneModel(title: "Z", fontSize: 8)
+        z.sanitize()
+        XCTAssertEqual(z.fontSize, 8)
+    }
+}
+
+final class AlignmentTests: SandboxedTestCase {
+    private func state(with frames: [CGRect], screens: [CGRect]) -> AppState {
+        let s = makeState(createStarter: false)
+        s.settings.gridSize = 20
+        s.screenFramesProvider = { screens }
+        s.zones = frames.enumerated().map { ZoneModel(title: "Z\($0.offset)", frame: $0.element, expandedHeight: $0.element.height) }
+        return s
+    }
+
+    func testAlignToGridSnapsWithoutRearranging() {
+        let screen = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+        let s = state(with: [CGRect(x: 103, y: 607, width: 347, height: 261), CGRect(x: 812, y: 211, width: 300, height: 300)], screens: [screen])
+        s.alignAllZonesToGrid()
+        for z in s.zones {
+            XCTAssertEqual(z.frame.minX.truncatingRemainder(dividingBy: 20), 0, "\(z.title) x on grid")
+            XCTAssertEqual(z.frame.maxY.truncatingRemainder(dividingBy: 20), 0, "\(z.title) top on grid")
+            XCTAssertEqual(z.frame.width.truncatingRemainder(dividingBy: 20), 0)
+            XCTAssertEqual(z.frame.height.truncatingRemainder(dividingBy: 20), 0)
+        }
+        XCTAssertEqual(s.zones[0].frame.minX, 100, "stays near where it was")
+        XCTAssertLessThan(s.zones[0].frame.minX, s.zones[1].frame.minX, "order preserved")
+    }
+
+    func testAutoAlignKeepsZonesOnTheirOwnDisplay() {
+        let main = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let second = CGRect(x: 1440, y: 0, width: 1920, height: 1080)
+        let s = state(with: [CGRect(x: 300, y: 300, width: 340, height: 260),
+                             CGRect(x: 2000, y: 400, width: 340, height: 260),
+                             CGRect(x: 2600, y: 200, width: 340, height: 260)], screens: [main, second])
+        s.autoAlignAllZones()
+        XCTAssertTrue(main.contains(s.zones[0].frame), "zone stays on main display")
+        XCTAssertTrue(second.contains(s.zones[1].frame), "zone stays on second display")
+        XCTAssertTrue(second.contains(s.zones[2].frame))
+        XCTAssertFalse(s.zones[1].frame.intersects(s.zones[2].frame), "no overlap")
+        for z in s.zones { XCTAssertEqual(z.frame.minX.truncatingRemainder(dividingBy: 20), 0) }
+    }
+}

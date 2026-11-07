@@ -14,6 +14,10 @@ enum FileSelection {
                   let a = ordered.firstIndex(where: { $0.path == anchorPath }),
                   let b = ordered.firstIndex(where: { $0.path == file.path }) {
             selection = Set(ordered[min(a, b)...max(a, b)].map(\.path))
+        } else if selection == [file.path] {
+            // Clicking the only selected item again deselects it.
+            selection = []
+            anchor = nil
         } else {
             selection = [file.path]
             anchor = file.path
@@ -119,17 +123,21 @@ public struct ZoneIconGridView: View {
     }
 
     public var body: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            LazyVGrid(columns: columns, spacing: CGFloat(zone.iconSpacing)) {
-                ForEach(files) { file in
-                    cell(file)
+        GeometryReader { proxy in
+            ScrollView(.vertical, showsIndicators: true) {
+                LazyVGrid(columns: columns, spacing: CGFloat(zone.iconSpacing)) {
+                    ForEach(files) { file in
+                        cell(file)
+                    }
                 }
+                .padding(10)
+                // Fill the visible area so clicks on empty space land here (inside the scroll
+                // content) and clear the selection; a background behind the ScrollView never got them.
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
+                .contentShape(Rectangle())
+                .onTapGesture { selectedFilePaths = [] }
             }
-            .padding(10)
         }
-        .background(
-            Color.clear.contentShape(Rectangle()).onTapGesture { selectedFilePaths = [] }
-        )
     }
 
     private func cell(_ file: FileItem) -> some View {

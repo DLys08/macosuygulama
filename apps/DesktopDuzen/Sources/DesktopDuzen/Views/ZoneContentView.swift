@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import QuickLookUI
 
 public struct ZoneContentView: View {
     @EnvironmentObject var appState: AppState
@@ -67,6 +68,10 @@ public struct ZoneContentView: View {
             }
             .background(KeyEventHandlerView { event in handleKey(event, zone: zone) })
             .onChange(of: zone.manualOrder) { order in store.updateManualOrder(order) }
+            // Clicking the desktop, another zone or another app clears this zone's selection.
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification, object: controller.panel)) { _ in
+                if !selectedFilePaths.isEmpty && !QuickLookIsShowing.value { selectedFilePaths = [] }
+            }
         } else {
             Color.clear
         }
@@ -224,6 +229,10 @@ public struct ZoneContentView: View {
     private func handleKey(_ event: NSEvent, zone: ZoneModel) -> Bool {
         let selected = store.files.filter { selectedFilePaths.contains($0.path) }
         switch event.keyCode {
+        case 53: // Esc clears the selection
+            guard !selectedFilePaths.isEmpty else { return false }
+            selectedFilePaths = []
+            return true
         case 49: // Space
             guard !selected.isEmpty else { return false }
             QuickLookManager.shared.togglePreview(urls: selected.map(\.url))
@@ -291,6 +300,11 @@ public struct ZoneContentView: View {
 }
 
 // MARK: - Shared helpers
+
+/// Quick Look takes key status from the zone; keep the selection while its panel is up.
+enum QuickLookIsShowing {
+    static var value: Bool { QLPreviewPanel.sharedPreviewPanelExists() && (QLPreviewPanel.shared()?.isVisible ?? false) }
+}
 
 /// Always the same view structure; only the shadow strength changes. Switching between two
 /// different structures (if/else) replaced the whole zone subtree when the opacity slider

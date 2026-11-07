@@ -138,6 +138,33 @@ public struct ZoneHeaderView: View {
                     Text(mode.rawValue).tag(mode)
                 }
             }
+            Menu("Text Size") {
+                ForEach([8.0, 9.0, 10.0, 11.0, 11.5, 12.0, 13.0, 14.0], id: \.self) { size in
+                    Button {
+                        appState.mutateZone(id: zone.id) { $0.fontSize = size }
+                    } label: {
+                        let label = size == 11.5 ? "11.5 pt (default)" : "\(Int(size)) pt"
+                        if abs(zone.fontSize - size) < 0.01 { Label(label, systemImage: "checkmark") } else { Text(label) }
+                    }
+                }
+                Divider()
+                Button("Use \(zone.fontSize == zone.fontSize.rounded() ? String(Int(zone.fontSize)) : String(zone.fontSize)) pt in All Zones") {
+                    let size = zone.fontSize
+                    var updated = appState.zones
+                    for i in updated.indices { updated[i].fontSize = size }
+                    appState.zones = updated
+                }
+            }
+            Menu("Icon Size") {
+                ForEach([32.0, 40.0, 48.0, 52.0, 64.0, 76.0], id: \.self) { size in
+                    Button {
+                        appState.mutateZone(id: zone.id) { $0.iconSize = size }
+                    } label: {
+                        let label = size == 52 ? "\(Int(size)) px (default)" : "\(Int(size)) px"
+                        if abs(zone.iconSize - size) < 0.01 { Label(label, systemImage: "checkmark") } else { Text(label) }
+                    }
+                }
+            }
             Divider()
             Button("Add Tab…", action: addNewTab)
             Button("Reveal in Finder", action: revealInFinder)
@@ -160,6 +187,9 @@ public struct ZoneHeaderView: View {
                 }
             }
         }
+        Divider()
+        Button("Align All Zones to Grid") { appState.alignAllZonesToGrid() }
+        Button("Auto-Align All Zones") { appState.autoAlignAllZones() }
         Divider()
         Button("Rename Zone…", action: beginRename)
         Button("Delete Zone…") { ZoneActions.confirmDelete(id: zone.id) }

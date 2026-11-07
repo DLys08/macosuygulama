@@ -102,6 +102,11 @@ public class MenuBarManager: NSObject, NSMenuDelegate {
         alignItem.image = NSImage(systemSymbolName: "rectangle.3.group", accessibilityDescription: nil)
         menu.addItem(alignItem)
         
+        let gridItem = NSMenuItem(title: "Align All Zones to Grid", action: #selector(alignToGrid), keyEquivalent: "g")
+        gridItem.target = self
+        gridItem.image = NSImage(systemSymbolName: "grid", accessibilityDescription: nil)
+        menu.addItem(gridItem)
+        
         let snapState = "Snap Zones While Dragging"
         let snapItem = NSMenuItem(title: snapState, action: #selector(toggleGridSnapping), keyEquivalent: "")
         snapItem.target = self
@@ -189,6 +194,8 @@ public class MenuBarManager: NSObject, NSMenuDelegate {
     }
     
     @objc private func addSticker() { ZoneActions.addSticker() }
+    
+    @objc private func alignToGrid() { AppState.shared.alignAllZonesToGrid() }
     
     @objc private func autoAlignAll() {
         AppState.shared.autoAlignAllZones()

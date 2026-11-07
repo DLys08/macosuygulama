@@ -170,27 +170,88 @@ public final class AppState: ObservableObject {
         }
     }
 
-    // MARK: - Auto-align
+    // MARK: - Alignment
 
+    /// Visible frames of the connected displays (injectable for tests).
+    public var screenFramesProvider: () -> [CGRect] = {
+        NSScreen.screens.map { $0.visibleFrame }
+    }
+
+    private func screenIndex(for rect: CGRect, in screens: [CGRect]) -> Int {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        if let i = screens.firstIndex(where: { $0.contains(center) }) { return i }
+        // Off-screen zones go to the display they overlap most, else the first.
+        var best = 0
+        var bestArea: CGFloat = -1
+        for (i, screen) in screens.enumerated() {
+            let r = screen.intersection(rect)
+            let area = r.isNull ? 0 : r.width * r.height
+            if area > bestArea { best = i; bestArea = area }
+        }
+        return best
+    }
+
+    private var gridStep: CGFloat { max(5, settings.gridSize) }
+
+    private func snap(_ value: CGFloat, origin: CGFloat) -> CGFloat {
+        origin + ((value - origin) / gridStep).rounded() * gridStep
+    }
+
+    /// Arranges zones in rows, top-left first, separately on each display, on the grid.
     public func autoAlignAllZones() {
-        guard let screen = NSScreen.main?.visibleFrame ?? NSScreen.screens.first?.visibleFrame else { return }
-        let margin: CGFloat = 40
-        let spacing: CGFloat = 20
-        var x = screen.minX + margin
-        var top = screen.maxY - margin
-        var rowHeight: CGFloat = 0
+        let screens = screenFramesProvider()
+        guard !screens.isEmpty else { return }
+        let margin = max(gridStep, 20)
+        let spacing = gridStep
+        var updated = zones
+        for (s, screen) in screens.enumerated() {
+            let members = updated.indices.filter { screenIndex(for: updated[$0].frame, in: screens) == s }
+                .sorted { a, b in
+                    // Keep the user's rough reading order: top rows first, then left to right.
+                    let fa = updated[a].frame, fb = updated[b].frame
+                    if abs(fa.maxY - fb.maxY) > 60 { return fa.maxY > fb.maxY }
+                    return fa.minX < fb.minX
+                }
+            var x = screen.minX + margin
+            var top = screen.maxY - margin
+            var rowHeight: CGFloat = 0
+            for i in members {
+                let w = min(updated[i].frame.width, screen.width - 2 * margin)
+                let h = updated[i].isCollapsed ? updated[i].collapsedHeight : updated[i].expandedHeight
+                if x + w > screen.maxX - margin && x > screen.minX + margin {
+                    x = screen.minX + margin
+                    top -= rowHeight + spacing
+                    rowHeight = 0
+                }
+                let originX = snap(x, origin: screen.minX)
+                let originY = max(screen.minY, snap(top - h, origin: screen.minY))
+                updated[i].frame = CGRect(x: originX, y: originY, width: w, height: h).integral
+                x = originX + w + spacing
+                rowHeight = max(rowHeight, h)
+            }
+        }
+        zones = updated
+    }
+
+    /// Snaps every zone's position and size to the desktop grid without rearranging the layout.
+    public func alignAllZonesToGrid() {
+        let screens = screenFramesProvider()
+        guard !screens.isEmpty else { return }
         var updated = zones
         for i in updated.indices {
-            let w = updated[i].frame.width
-            let h = updated[i].isCollapsed ? updated[i].collapsedHeight : updated[i].expandedHeight
-            if x + w > screen.maxX - margin && x > screen.minX + margin {
-                x = screen.minX + margin
-                top -= rowHeight + spacing
-                rowHeight = 0
-            }
-            updated[i].frame = CGRect(x: x, y: max(screen.minY, top - h), width: w, height: h).integral
-            x += w + spacing
-            rowHeight = max(rowHeight, h)
+            let screen = screens[screenIndex(for: updated[i].frame, in: screens)]
+            var f = updated[i].frame
+            let width = max(220, (f.width / gridStep).rounded() * gridStep)
+            let height = updated[i].isCollapsed ? updated[i].collapsedHeight : max(120, (f.height / gridStep).rounded() * gridStep)
+            // Snap the top-left corner (what the user sees as the zone's position).
+            let left = snap(f.minX, origin: screen.minX)
+            let top = snap(f.maxY, origin: screen.minY)
+            f = CGRect(x: left, y: top - height, width: width, height: height)
+            // Keep the zone on its display.
+            f.origin.x = min(max(f.minX, screen.minX), screen.maxX - f.width)
+            f.origin.y = min(max(f.minY, screen.minY), screen.maxY - f.height)
+            updated[i].frame = f.integral
+            if !updated[i].isCollapsed { updated[i].expandedHeight = updated[i].frame.height }
         }
         zones = updated
     }

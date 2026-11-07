@@ -131,6 +131,7 @@ public struct SettingsView: View {
         HStack {
             sectionTitle("Zones (\(appState.zones.count))")
             Spacer()
+            Button("Align to Grid") { appState.alignAllZonesToGrid() }
             Button("Auto-Align All") { appState.autoAlignAllZones() }
         }
         ForEach(appState.zones) { zone in
