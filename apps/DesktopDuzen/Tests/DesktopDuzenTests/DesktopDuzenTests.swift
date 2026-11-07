@@ -617,3 +617,27 @@ final class ZoneTitleTests: XCTestCase {
         XCTAssertNil(ZoneTitle.initials(""))
     }
 }
+
+final class WidgetThemeTests: XCTestCase {
+    func testOldWidgetsKeepOriginalLookAndNewOnesAreReadable() throws {
+        let json = #"{"id":"23403662-1920-411F-9F39-EC6862779FF5","type":"Clock & Date","title":"Desktop Clock","frame":[[60,970],[220,110]]}"#
+        let old = try JSONDecoder().decode(DesktopWidget.self, from: Data(json.utf8))
+        XCTAssertEqual(old.themeID, "dark_frost")
+        XCTAssertNil(old.backgroundOpacity)
+        XCTAssertTrue(old.showBorder)
+        for theme in ThemePresets.allThemes {
+            let p = ZonePalette.forWidget(DesktopWidget(type: .clock, themeID: theme.id))
+            XCTAssertGreaterThanOrEqual(p.titleContrast, 4.5, theme.name)
+            XCTAssertGreaterThanOrEqual(p.secondaryContrast, 4.5, theme.name)
+        }
+        XCTAssertTrue(ZonePalette.forWidget(DesktopWidget(type: .clock, backgroundOpacity: 0)).isClear)
+    }
+
+    func testWidgetStyleRoundTrips() throws {
+        let w = DesktopWidget(type: .calendar, themeID: "liquid_aqua", backgroundOpacity: 0.5, showBorder: false)
+        let back = try JSONDecoder().decode(DesktopWidget.self, from: JSONEncoder().encode(w))
+        XCTAssertEqual(back.themeID, "liquid_aqua")
+        XCTAssertEqual(back.backgroundOpacity, 0.5)
+        XCTAssertFalse(back.showBorder)
+    }
+}

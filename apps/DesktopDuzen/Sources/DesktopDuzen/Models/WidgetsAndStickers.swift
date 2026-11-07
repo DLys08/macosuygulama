@@ -83,6 +83,11 @@ public struct DesktopWidget: Identifiable, Codable, Equatable {
     public var noteContent: String
     public var noteColorHex: String
     public var isDigitalClock: Bool
+    /// Theme (same library as zones). Default matches the original dark glass look.
+    public var themeID: String
+    /// nil = theme opacity; below 0.35 the widget is drawn in clear mode.
+    public var backgroundOpacity: Double?
+    public var showBorder: Bool
 
     public init(
         id: UUID = UUID(),
@@ -91,7 +96,10 @@ public struct DesktopWidget: Identifiable, Codable, Equatable {
         frame: CGRect = CGRect(x: 300, y: 300, width: 220, height: 160),
         noteContent: String = "",
         noteColorHex: String = "#FFE066",
-        isDigitalClock: Bool = true
+        isDigitalClock: Bool = true,
+        themeID: String = "dark_frost",
+        backgroundOpacity: Double? = nil,
+        showBorder: Bool = true
     ) {
         self.id = id
         self.type = type
@@ -100,9 +108,14 @@ public struct DesktopWidget: Identifiable, Codable, Equatable {
         self.noteContent = noteContent
         self.noteColorHex = noteColorHex
         self.isDigitalClock = isDigitalClock
+        self.themeID = themeID
+        self.backgroundOpacity = backgroundOpacity
+        self.showBorder = showBorder
     }
 
-    enum CodingKeys: String, CodingKey { case id, type, title, frame, noteContent, noteColorHex, isDigitalClock }
+    enum CodingKeys: String, CodingKey {
+        case id, type, title, frame, noteContent, noteColorHex, isDigitalClock, themeID, backgroundOpacity, showBorder
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -116,5 +129,9 @@ public struct DesktopWidget: Identifiable, Codable, Equatable {
         noteContent = c.value(.noteContent, default: "")
         noteColorHex = c.value(.noteColorHex, default: "#FFE066")
         isDigitalClock = c.value(.isDigitalClock, default: true)
+        themeID = c.value(.themeID, default: "dark_frost")
+        let opacity: Double? = c.optionalValue(.backgroundOpacity)
+        backgroundOpacity = opacity.map { min(max($0, 0), 1) }
+        showBorder = c.value(.showBorder, default: true)
     }
 }

@@ -191,6 +191,18 @@ public struct ZonePalette: Equatable {
                            cornerRadius: theme.cornerRadius, borderWidth: theme.borderWidth)
     }
 
+    public static func forWidget(_ widget: DesktopWidget) -> ZonePalette {
+        let theme = ThemePresets.theme(for: widget.themeID)
+        var p: ZonePalette
+        if let opacity = widget.backgroundOpacity, opacity < ZoneModel.clearModeThreshold {
+            p = clear(theme: theme, customHex: nil, opacity: opacity)
+        } else {
+            p = make(theme: theme, customOpacity: widget.backgroundOpacity)
+        }
+        p.showBorder = widget.showBorder
+        return p
+    }
+
     public static func forZone(_ zone: ZoneModel) -> ZonePalette {
         let theme = ThemePresets.theme(for: zone.themeID)
         var p: ZonePalette

@@ -267,15 +267,24 @@ public final class WindowManager: ObservableObject {
             panel.close()
             widgetPanels.removeValue(forKey: id)
         }
-        for widget in widgets where widgetPanels[widget.id] == nil {
-            createWidgetPanel(for: widget)
+        for widget in widgets {
+            if widgetPanels[widget.id] == nil { createWidgetPanel(for: widget) }
+            guard let panel = widgetPanels[widget.id] else { continue }
+            let palette = ZonePalette.forWidget(widget)
+            let appearance = palette.appearance
+            if panel.appearance?.name != appearance?.name { panel.appearance = appearance }
+            let wantsShadow = !palette.isClear
+            if panel.hasShadow != wantsShadow {
+                panel.hasShadow = wantsShadow
+                panel.invalidateShadow()
+            }
         }
     }
 
     private func createWidgetPanel(for widget: DesktopWidget) {
         let panel = DesktopPanel(contentRect: displayFrame(for: widget.frame), resizable: true)
         panel.minimumContentSize = NSSize(width: 160, height: 100)
-        panel.appearance = NSAppearance(named: .darkAqua)
+        panel.appearance = ZonePalette.forWidget(widget).appearance
         panel.applySpacesBehavior(allSpaces: state.settings.showZonesOnAllSpaces)
         let id = widget.id
         panel.onFrameCommitted = { [weak self] frame in self?.commitWidgetFrame(id: id, frame: frame) }
