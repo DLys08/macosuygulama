@@ -30,6 +30,7 @@ This repository holds the website only. Each app lives in its own repository, li
 | [AleClip](https://github.com/themanoftalent/aleclip) | Clipboard history with search, instant paste, bulk delete, Google Drive week folders and Mac–iPhone sync | Swift 6, AppKit | [![release](https://img.shields.io/github/v/release/themanoftalent/aleclip?label=)](https://github.com/themanoftalent/aleclip/releases/latest) | see repo |
 | [AleBar](https://github.com/themanoftalent/AleBar) | Menu bar organizer, styling and command palette | Swift 6 | [![release](https://img.shields.io/github/v/release/themanoftalent/AleBar?label=)](https://github.com/themanoftalent/AleBar/releases/latest) | MIT |
 | [AleDesk](https://github.com/themanoftalent/AleDesk) | Remote desktop control and file transfer for macOS and Windows | Rust, Flutter | source only | AGPL-3.0 |
+| [DesktopDüzen](apps/DesktopDuzen) | Desktop zone organizer (Stardock Fences style) with live sync, auto-sort & widgets | Swift 6, AppKit, SwiftUI | [DMG (v1.0.0)](apps/DesktopDuzen/DesktopDuzen.dmg) | MIT |
 
 AleClip also has companion clients for [iOS](https://github.com/themanoftalent/aleclip-ios), [Windows](https://github.com/themanoftalent/aleclip-windows) and [Android](https://github.com/themanoftalent/aleclip-android).
 
