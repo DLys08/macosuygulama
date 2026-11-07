@@ -15,6 +15,9 @@ public struct AppSettings: Codable, Equatable {
     public var showHubOnLaunch: Bool
     /// Zone title bars stay invisible until the pointer is over the zone.
     public var hideTitleBarsUntilHover: Bool
+    /// When false (default) clicking a zone leaves keyboard focus with the frontmost app, so
+    /// macOS and app shortcuts keep working. Zones still take focus for text editing.
+    public var zonesTakeKeyboardFocus: Bool
 
     public init(
         launchAtLogin: Bool = false,
@@ -29,7 +32,8 @@ public struct AppSettings: Codable, Equatable {
         globalHotkeyEnabled: Bool = true,
         hasCompletedOnboarding: Bool = false,
         showHubOnLaunch: Bool = true,
-        hideTitleBarsUntilHover: Bool = true
+        hideTitleBarsUntilHover: Bool = true,
+        zonesTakeKeyboardFocus: Bool = false
     ) {
         self.launchAtLogin = launchAtLogin
         self.alignmentMode = alignmentMode
@@ -44,12 +48,13 @@ public struct AppSettings: Codable, Equatable {
         self.hasCompletedOnboarding = hasCompletedOnboarding
         self.showHubOnLaunch = showHubOnLaunch
         self.hideTitleBarsUntilHover = hideTitleBarsUntilHover
+        self.zonesTakeKeyboardFocus = zonesTakeKeyboardFocus
     }
 
     enum CodingKeys: String, CodingKey {
         case launchAtLogin, alignmentMode, snapToGrid, snapToNeighbors, gridSize, snapThreshold
         case showZonesOnAllSpaces, autoSortEnabled, hideLooseDesktopIcons, globalHotkeyEnabled
-        case hasCompletedOnboarding, showHubOnLaunch, hideTitleBarsUntilHover
+        case hasCompletedOnboarding, showHubOnLaunch, hideTitleBarsUntilHover, zonesTakeKeyboardFocus
     }
 
     public init(from decoder: Decoder) throws {
@@ -68,6 +73,7 @@ public struct AppSettings: Codable, Equatable {
         hasCompletedOnboarding = c.value(.hasCompletedOnboarding, default: d.hasCompletedOnboarding)
         showHubOnLaunch = c.value(.showHubOnLaunch, default: d.showHubOnLaunch)
         hideTitleBarsUntilHover = c.value(.hideTitleBarsUntilHover, default: d.hideTitleBarsUntilHover)
+        zonesTakeKeyboardFocus = c.value(.zonesTakeKeyboardFocus, default: d.zonesTakeKeyboardFocus)
     }
 }
 

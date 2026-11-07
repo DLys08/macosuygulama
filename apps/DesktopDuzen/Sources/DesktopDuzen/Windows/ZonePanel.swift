@@ -63,7 +63,10 @@ public class DesktopPanel: NSPanel, NSWindowDelegate {
         isReleasedWhenClosed = false
         hidesOnDeactivate = false      // NSPanel hides on deactivate by default; zones must stay visible.
         isFloatingPanel = false
-        becomesKeyOnlyIfNeeded = false
+        // Only take keyboard focus for views that need it (text fields). Taking it on every
+        // click sent the user's shortcuts (Cmd-Shift-E etc.) to DesktopDüzen instead of the
+        // frontmost app, because these panels can be key without activating the app.
+        becomesKeyOnlyIfNeeded = true
         worksWhenModal = true
         animationBehavior = .none
         level = DesktopPanel.desktopLevel
@@ -72,6 +75,11 @@ public class DesktopPanel: NSPanel, NSWindowDelegate {
 
     public override var canBecomeKey: Bool { true }
     public override var canBecomeMain: Bool { false }
+
+    public func applyKeyboardFocusPolicy(takesFocusOnClick: Bool) {
+        let onlyIfNeeded = !takesFocusOnClick
+        if becomesKeyOnlyIfNeeded != onlyIfNeeded { becomesKeyOnlyIfNeeded = onlyIfNeeded }
+    }
 
     public func applyLevel(pinned: Bool) {
         let target: NSWindow.Level = pinned ? .floating : DesktopPanel.desktopLevel

@@ -74,6 +74,9 @@ public final class WindowManager: ObservableObject {
         state.$settings.map(\.showZonesOnAllSpaces).removeDuplicates().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.refreshAllPanels() }
             .store(in: &cancellables)
+        state.$settings.map(\.zonesTakeKeyboardFocus).removeDuplicates().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.syncAllZones() }
+            .store(in: &cancellables)
     }
 
     private func observeSystem() {
@@ -152,6 +155,7 @@ public final class WindowManager: ObservableObject {
             let panel = controller.panel
             panel.applyLevel(pinned: zone.isPinnedOnTop)
             panel.applySpacesBehavior(allSpaces: allSpaces)
+            panel.applyKeyboardFocusPolicy(takesFocusOnClick: state.settings.zonesTakeKeyboardFocus)
             panel.minimumContentSize = NSSize(width: 220, height: zone.isCollapsed ? zone.collapsedHeight : 120)
 
             let palette = ZonePalette.forZone(zone)
@@ -261,7 +265,6 @@ public final class WindowManager: ObservableObject {
         let panel = controller.panel
         panel.level = .floating
         panel.orderFrontRegardless()
-        panel.makeKey()
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
             guard let current = self?.state.zone(id: id) else { return }
             panel.applyLevel(pinned: current.isPinnedOnTop)

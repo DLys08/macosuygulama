@@ -832,3 +832,15 @@ final class WidgetNameTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(DesktopWidget.self, from: Data(custom.utf8)).title, "Istanbul", "custom titles kept")
     }
 }
+
+final class KeyboardFocusTests: XCTestCase {
+    func testZonesDoNotStealKeyboardFocusByDefault() throws {
+        XCTAssertFalse(AppSettings().zonesTakeKeyboardFocus)
+        XCTAssertFalse(try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8)).zonesTakeKeyboardFocus)
+        let panel = ZonePanel(zone: ZoneModel(title: "Z"), contentRect: NSRect(x: 0, y: 0, width: 300, height: 200))
+        XCTAssertTrue(panel.becomesKeyOnlyIfNeeded, "clicks must not make the zone key")
+        panel.applyKeyboardFocusPolicy(takesFocusOnClick: true)
+        XCTAssertFalse(panel.becomesKeyOnlyIfNeeded)
+        XCTAssertTrue(panel.canBecomeKey, "text fields (rename) can still get focus")
+    }
+}

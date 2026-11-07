@@ -50,7 +50,7 @@ public struct WindowDragArea: NSViewRepresentable {
                 onDoubleClick?()
                 return
             }
-            window.makeKey()
+            // No makeKey(): dragging must not steal keyboard focus from the frontmost app.
             let startMouse = NSEvent.mouseLocation
             let startFrame = window.frame
             var moved = false

@@ -44,6 +44,7 @@ Desktop behaviour
 - Works across Spaces, sleep/wake and display changes. A zone whose display is disconnected is shown on the main display without losing its saved position.
 - Widgets: Time (clock), calendar, sticky note, real CPU/memory monitor; desktop stickers. Widgets use the same themes and transparency as zones (… menu in the widget header).
 - Launch at login, menu bar controls, global search across zones (Cmd-Shift-Space).
+- Clicking a zone never steals keyboard focus, so macOS and app shortcuts keep working (optional setting to let zones take focus for Space/Esc/Cmd-A shortcuts).
 
 ## Data and safety
 
@@ -53,7 +54,7 @@ Desktop behaviour
 ## Build
 
 ```bash
-swift test                      # 65 tests; they use temporary folders only and never touch your Desktop
+swift test                      # 66 tests; they use temporary folders only and never touch your Desktop
 ./scripts/build_app.sh          # builds and signs DesktopDuzen.app (Developer ID if available, else ad-hoc)
 ./scripts/create_dmg.sh         # packages and verifies DesktopDuzen-<version>.dmg
 swift scripts/make_icon.swift Resources && iconutil -c icns Resources/AppIcon.iconset -o Resources/AppIcon.icns

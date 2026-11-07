@@ -96,6 +96,8 @@ public struct SettingsView: View {
         sectionTitle("Windows & Spaces")
         Toggle("Show zones on all Spaces", isOn: $appState.settings.showZonesOnAllSpaces)
         Toggle("Hide zone title bars until the pointer is over a zone", isOn: $appState.settings.hideTitleBarsUntilHover)
+        Toggle("Zones take keyboard focus when clicked", isOn: $appState.settings.zonesTakeKeyboardFocus)
+        caption("Off: your keyboard shortcuts keep going to the app you are using, even after clicking a zone. On: Space (Quick Look), Esc, Cmd-A and Cmd-Delete work in a zone after you click it.")
         caption("When off, each zone stays on the Space where it was created. Zones never appear over full-screen apps.")
 
         Divider()
