@@ -179,6 +179,9 @@ public struct HubView: View {
                 }
                 .controlSize(.small)
             }
+            Button("Style…") { WindowManager.shared.showStyleWindow(for: zone.id) }
+                .controlSize(.small)
+                .help("Theme, colour, transparency, text and icon size")
             Button("Show") { WindowManager.shared.focusZone(id: zone.id) }
                 .controlSize(.small)
                 .help("Bring this zone to the front for a few seconds")

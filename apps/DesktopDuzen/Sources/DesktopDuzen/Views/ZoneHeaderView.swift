@@ -74,10 +74,6 @@ public struct ZoneHeaderView: View {
                     .background(palette.controlFill)
                     .clipShape(Circle())
                     .help("More options")
-                    .popover(isPresented: $controller.isStylePickerPresented, arrowEdge: .bottom) {
-                        ZoneStylePickerView(zoneID: zone.id)
-                            .environmentObject(appState)
-                    }
                 }
             }
             .padding(.horizontal, 12)
@@ -121,11 +117,7 @@ public struct ZoneHeaderView: View {
     @ViewBuilder
     private var menuContent: some View {
         Button("Style & Theme…") {
-            // Let the menu finish closing before presenting the popover from its button.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                controller.panel.makeKey()
-                controller.isStylePickerPresented = true
-            }
+            WindowManager.shared.showStyleWindow(for: zone.id)
         }
         Divider()
         if zone.type != .app {

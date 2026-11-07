@@ -33,6 +33,8 @@ public final class WindowManager: ObservableObject {
     private var searchWindow: KeyablePanel?
     private var hubWindow: NSWindow?
     private var aboutWindow: NSWindow?
+    private var styleWindow: NSPanel?
+    private var styleZoneID: UUID?
 
     private var cancellables = Set<AnyCancellable>()
     private var started = false
@@ -129,6 +131,12 @@ public final class WindowManager: ObservableObject {
         let zones = state.zones
         let ids = Set(zones.map { $0.id })
 
+        if let styleID = styleZoneID, !ids.contains(styleID) {
+            styleWindow?.orderOut(nil)
+            styleZoneID = nil
+        } else if let styleID = styleZoneID, let z = zones.first(where: { $0.id == styleID }) {
+            styleWindow?.title = "Style – \(z.title)"
+        }
         for (id, controller) in controllers where !ids.contains(id) {
             controller.store.stop()
             controller.panel.orderOut(nil)
@@ -376,6 +384,50 @@ public final class WindowManager: ObservableObject {
     }
 
     public func closeHub() { hubWindow?.orderOut(nil) }
+
+    /// Zone style settings in a solid, floating window (a popover attached to a desktop-level
+    /// zone was translucent and could be covered by other zones).
+    public func showStyleWindow(for zoneID: UUID) {
+        guard let zone = state.zone(id: zoneID) else { return }
+        let panel: NSPanel
+        if let existing = styleWindow {
+            panel = existing
+        } else {
+            panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 380, height: 680),
+                            styleMask: [.titled, .closable, .resizable, .utilityWindow],
+                            backing: .buffered, defer: false)
+            panel.isFloatingPanel = true
+            panel.level = .floating
+            panel.hidesOnDeactivate = false
+            panel.isReleasedWhenClosed = false
+            panel.becomesKeyOnlyIfNeeded = false
+            panel.isOpaque = true
+            panel.backgroundColor = .windowBackgroundColor
+            panel.contentMinSize = NSSize(width: 360, height: 420)
+            panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+            styleWindow = panel
+        }
+        styleZoneID = zoneID
+        panel.title = "Style – \(zone.title)"
+        panel.contentView = NSHostingView(rootView:
+            ScrollView { ZoneStylePickerView(zoneID: zoneID) }
+                .background(Color(nsColor: .windowBackgroundColor))
+                .environmentObject(state))
+
+        // Place beside the zone, on the same display, fully on screen.
+        let zoneFrame = controllers[zoneID]?.panel.frame ?? zone.frame
+        let screen = NSScreen.screens.first(where: { $0.frame.intersects(zoneFrame) })?.visibleFrame
+            ?? NSScreen.main?.visibleFrame ?? zoneFrame
+        let size = panel.frame.size
+        var x = zoneFrame.maxX + 12
+        if x + size.width > screen.maxX { x = zoneFrame.minX - size.width - 12 }
+        x = min(max(x, screen.minX + 8), screen.maxX - size.width - 8)
+        var y = zoneFrame.maxY - size.height
+        y = min(max(y, screen.minY + 8), screen.maxY - size.height - 8)
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
+    }
 
     public func showAbout() {
         if let window = aboutWindow { present(window); return }

@@ -9,6 +9,7 @@ public struct ZoneContentView: View {
     @EnvironmentObject var store: ZoneFileStore
     let zoneID: UUID
 
+    @ObservedObject private var wallpaper = WallpaperSampler.shared
     @State private var selectedFilePaths: Set<String> = []
     @State private var isDropTargeted = false
     @State private var banner: String?
@@ -60,7 +61,7 @@ public struct ZoneContentView: View {
                                   lineWidth: isDropTargeted ? 2.5 : CGFloat(palette.borderWidth))
             )
             // Clear zones: halo every label and icon so they read on any wallpaper.
-            .modifier(ClearModeHalo(active: palette.isClear))
+            .modifier(ClearModeHalo(active: palette.isClear, lightGlow: palette.clearOnLight))
             .environment(\.zonePalette, palette)
             .environment(\.colorScheme, palette.colorScheme)
             .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
@@ -311,10 +312,13 @@ enum QuickLookIsShowing {
 /// crossed the clear-mode threshold, which reset the header and closed the style popover.
 struct ClearModeHalo: ViewModifier {
     let active: Bool
+    /// Dark text on a light wallpaper gets a light glow; light text gets a dark shadow.
+    var lightGlow: Bool = false
     func body(content: Content) -> some View {
-        content
-            .shadow(color: Color.black.opacity(active ? 0.9 : 0), radius: active ? 1.0 : 0, x: 0, y: active ? 0.5 : 0)
-            .shadow(color: Color.black.opacity(active ? 0.6 : 0), radius: active ? 3.0 : 0, x: 0, y: active ? 1 : 0)
+        let halo = lightGlow ? Color.white : Color.black
+        return content
+            .shadow(color: halo.opacity(active ? 0.9 : 0), radius: active ? 1.0 : 0, x: 0, y: active ? 0.5 : 0)
+            .shadow(color: halo.opacity(active ? 0.6 : 0), radius: active ? 3.0 : 0, x: 0, y: active ? 1 : 0)
     }
 }
 

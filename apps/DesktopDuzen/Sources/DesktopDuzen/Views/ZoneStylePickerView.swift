@@ -8,8 +8,8 @@ public struct ZoneStylePickerView: View {
     public var body: some View {
         if let zone = appState.zone(id: zoneID) {
             content(zone)
-                .padding(14)
-                .frame(width: 360)
+                .padding(16)
+                .frame(minWidth: 340, maxWidth: .infinity, alignment: .topLeading)
         }
     }
 
@@ -17,8 +17,9 @@ public struct ZoneStylePickerView: View {
         let palette = ZonePalette.forZone(zone)
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Zone Style")
+                Text(zone.title)
                     .font(.headline)
+                    .lineLimit(1)
                 Spacer()
                 if !appState.isPro {
                     Button("Unlock All") { WindowManager.shared.showPaywall() }
@@ -109,7 +110,7 @@ public struct ZoneStylePickerView: View {
                 Image(systemName: "checkmark.seal.fill").foregroundColor(palette.accent)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Readable text").font(.system(size: 12, weight: .bold)).foregroundColor(palette.title)
-                    Text(palette.isClear ? "Shadowed labels (clear mode)" : String(format: "Contrast %.1f : 1", palette.primaryContrast))
+                    Text(palette.isClear ? (palette.clearOnLight ? "Dark labels: light wallpaper behind" : "Light labels: dark wallpaper behind") : String(format: "Contrast %.1f : 1", palette.primaryContrast))
                         .font(.system(size: 10)).foregroundColor(palette.secondary)
                 }
                 Spacer()
@@ -119,7 +120,15 @@ public struct ZoneStylePickerView: View {
                 }
             }
             .padding(8)
-            .background(RoundedRectangle(cornerRadius: 8).fill(palette.tint.color.opacity(palette.tintOpacity)))
+            // Clear mode has no fill of its own: preview it on a dark "wallpaper" sample, with the halo.
+            .modifier(ClearModeHalo(active: palette.isClear, lightGlow: palette.clearOnLight))
+            .background(
+                RoundedRectangle(cornerRadius: 8).fill(
+                    palette.isClear
+                        ? AnyShapeStyle(LinearGradient(colors: palette.clearOnLight ? [Color(white: 0.82), Color(white: 0.97)] : [Color(white: 0.22), Color(white: 0.42)], startPoint: .leading, endPoint: .trailing))
+                        : AnyShapeStyle(palette.tint.color.opacity(palette.tintOpacity))
+                )
+            )
             .environment(\.colorScheme, palette.colorScheme)
 
             Divider()

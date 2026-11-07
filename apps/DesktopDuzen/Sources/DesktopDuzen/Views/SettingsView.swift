@@ -148,6 +148,7 @@ public struct SettingsView: View {
                         .truncationMode(.middle)
                 }
                 Spacer()
+                Button("Style…") { WindowManager.shared.showStyleWindow(for: zone.id) }.controlSize(.small)
                 Button("Show") { WindowManager.shared.focusZone(id: zone.id) }.controlSize(.small)
                 Button("Rename…") { ZoneActions.renameZone(id: zone.id) }.controlSize(.small)
                 Button { ZoneActions.confirmDelete(id: zone.id) } label: {

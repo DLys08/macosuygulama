@@ -730,3 +730,80 @@ final class AlignmentTests: SandboxedTestCase {
         for z in s.zones { XCTAssertEqual(z.frame.minX.truncatingRemainder(dividingBy: 20), 0) }
     }
 }
+
+final class WallpaperContrastTests: XCTestCase {
+    func testClearZoneTextFollowsWallpaperBrightness() {
+        let onWhite = ZonePalette.clear(theme: ThemePresets.glassBlur, customHex: nil, opacity: 0, behindLuminance: 1.0)
+        XCTAssertTrue(onWhite.clearOnLight)
+        XCTAssertEqual(onWhite.primaryRGB, .black, "white wallpaper -> black text")
+        XCTAssertEqual(onWhite.titleRGB, .black)
+
+        let onBlack = ZonePalette.clear(theme: ThemePresets.glassBlur, customHex: nil, opacity: 0, behindLuminance: 0.02)
+        XCTAssertFalse(onBlack.clearOnLight)
+        XCTAssertEqual(onBlack.primaryRGB, .white, "dark wallpaper -> white text")
+
+        let unknown = ZonePalette.clear(theme: ThemePresets.glassBlur, customHex: nil, opacity: 0, behindLuminance: nil)
+        XCTAssertEqual(unknown.primaryRGB, .white, "until the wallpaper is known, white text with a shadow")
+    }
+
+    func testChosenTextColourAlwaysHasTheHigherContrast() {
+        for i in 0...100 {
+            let l = Double(i) / 100
+            let p = ZonePalette.clear(theme: ThemePresets.glassBlur, customHex: nil, opacity: 0, behindLuminance: l)
+            let bg = RGBAColor(r: 0, g: 0, b: 0) // contrast only depends on luminance; build a grey with luminance l
+            _ = bg
+            let chosen = (p.primaryRGB.relativeLuminance + 0.05)
+            let blackContrast = (l + 0.05) / 0.05
+            let whiteContrast = 1.05 / (l + 0.05)
+            let best = max(blackContrast, whiteContrast)
+            let actual = p.primaryRGB == .black ? blackContrast : whiteContrast
+            XCTAssertEqual(actual, best, accuracy: 0.0001, "luminance \(l)")
+            XCTAssertGreaterThanOrEqual(actual, 4.58, "luminance \(l) chosen \(chosen)")
+        }
+    }
+
+    func testRegionAveragingUsesTopDownRows() {
+        // 2x2 grid: top row black, bottom row white. Screen 0...100 x 0...100 (AppKit, y up).
+        let grid = [0.0, 0.0, 1.0, 1.0]
+        let screen = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let top = WallpaperSampler.average(grid, width: 2, height: 2, screenFrame: screen, rect: CGRect(x: 0, y: 60, width: 100, height: 40))
+        let bottom = WallpaperSampler.average(grid, width: 2, height: 2, screenFrame: screen, rect: CGRect(x: 0, y: 0, width: 100, height: 40))
+        XCTAssertEqual(top, 0.0, "upper half of the screen is the first grid row")
+        XCTAssertEqual(bottom, 1.0)
+        XCTAssertNil(WallpaperSampler.average(grid, width: 2, height: 2, screenFrame: screen, rect: CGRect(x: 500, y: 500, width: 10, height: 10)))
+    }
+}
+
+final class WallpaperStoreTests: XCTestCase {
+    private func store(provider: String, config: [String: Any]? = nil, files: [Any] = [], uuid: String = "D1") -> [String: Any] {
+        var choice: [String: Any] = ["Provider": provider, "Files": files]
+        if let config = config {
+            choice["Configuration"] = try! PropertyListSerialization.data(fromPropertyList: config, format: .binary, options: 0)
+        }
+        return ["Displays": [uuid: ["Linked": ["Content": ["Choices": [choice]]]]]]
+    }
+
+    func testSolidSystemColours() {
+        let black = store(provider: "com.apple.wallpaper.choice.color", config: ["type": "systemColor", "systemColor": ["black": [String: Any]()]])
+        XCTAssertEqual(WallpaperSampler.source(inStore: black, displayUUID: "D1"), .solid(0))
+        let white = store(provider: "com.apple.wallpaper.choice.color", config: ["type": "systemColor", "systemColor": ["white": [String: Any]()]])
+        XCTAssertEqual(WallpaperSampler.source(inStore: white, displayUUID: "D1"), .solid(1))
+    }
+
+    func testCustomColourComponents() {
+        let s = store(provider: "com.apple.wallpaper.choice.color", config: ["type": "rgb", "color": ["red": 1.0, "green": 1.0, "blue": 0.9]])
+        guard case .solid(let l)? = WallpaperSampler.source(inStore: s, displayUUID: "D1") else { return XCTFail() }
+        XCTAssertTrue(ZonePalette.prefersDarkText(onLuminance: l), "pale yellow wallpaper -> black text")
+    }
+
+    func testImageAndFallbacks() {
+        let img = store(provider: "com.apple.wallpaper.choice.image", files: [["relative": "file:///Users/x/Pictures/beach.jpg"]])
+        XCTAssertEqual(WallpaperSampler.source(inStore: img, displayUUID: "D1"), .image(URL(fileURLWithPath: "/Users/x/Pictures/beach.jpg")))
+        XCTAssertNil(WallpaperSampler.source(inStore: store(provider: "com.apple.wallpaper.choice.aerials"), displayUUID: "D1"), "aerials: unknown")
+        // Unknown display falls back to SystemDefault.
+        var withDefault = store(provider: "com.apple.wallpaper.choice.color", config: ["type": "systemColor", "systemColor": ["white": [String: Any]()]], uuid: "OTHER")
+        withDefault["SystemDefault"] = ["Linked": ["Content": ["Choices": [["Provider": "com.apple.wallpaper.choice.color",
+            "Configuration": try! PropertyListSerialization.data(fromPropertyList: ["type": "systemColor", "systemColor": ["black": [String: Any]()]], format: .binary, options: 0)]]]]]
+        XCTAssertEqual(WallpaperSampler.source(inStore: withDefault, displayUUID: "D1"), .solid(0))
+    }
+}

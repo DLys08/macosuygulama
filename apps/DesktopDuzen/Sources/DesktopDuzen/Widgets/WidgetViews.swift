@@ -7,6 +7,7 @@ import Combine
 /// note colour for the writing area.
 public struct WidgetContainerView: View {
     @EnvironmentObject var appState: AppState
+    @ObservedObject private var wallpaper = WallpaperSampler.shared
     let widgetID: UUID
 
     private var dragArea: some View {
@@ -45,7 +46,7 @@ public struct WidgetContainerView: View {
                     .strokeBorder(palette.showBorder ? palette.border : Color.clear, lineWidth: CGFloat(palette.borderWidth))
                     .allowsHitTesting(false)
             )
-            .modifier(ClearModeHalo(active: palette.isClear))
+            .modifier(ClearModeHalo(active: palette.isClear, lightGlow: palette.clearOnLight))
             .environment(\.zonePalette, palette)
             .environment(\.colorScheme, palette.colorScheme)
         }
