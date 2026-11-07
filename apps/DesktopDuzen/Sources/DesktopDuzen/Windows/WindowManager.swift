@@ -9,6 +9,8 @@ public final class ZoneController: ObservableObject {
     public let panel: ZonePanel
     public let store: ZoneFileStore
     @Published public var isHoverExpanded = false
+    /// Lives here (not in view @State) so no view rebuild can dismiss the style popover.
+    @Published public var isStylePickerPresented = false
     var appliedPaletteDark: Bool?
 
     init(zone: ZoneModel, frame: NSRect, fileService: FileManagerService) {

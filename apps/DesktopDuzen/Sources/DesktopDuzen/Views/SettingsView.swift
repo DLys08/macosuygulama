@@ -157,6 +157,7 @@ public struct SettingsView: View {
             }
             .padding(10)
             .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
+            transparencyRow(zone)
         }
         HStack(spacing: 10) {
             Button("New File Zone…") { ZoneActions.createFileZone() }.buttonStyle(.borderedProminent)
@@ -164,6 +165,30 @@ public struct SettingsView: View {
             Button("New App Zone…") { ZoneActions.createAppZone() }
         }
         .padding(.top, 4)
+    }
+
+    private func transparencyRow(_ zone: ZoneModel) -> some View {
+        let opacity = zone.customBackgroundOpacity ?? ThemePresets.theme(for: zone.themeID).backgroundOpacity
+        return HStack(spacing: 10) {
+            Text("Background")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .frame(width: 70, alignment: .leading)
+            Slider(value: Binding(
+                get: { opacity },
+                set: { v in appState.mutateZone(id: zone.id) { $0.customBackgroundOpacity = v } }
+            ), in: 0...1, step: 0.05)
+            Text(opacity <= 0.001 ? "Clear" : "\(Int((opacity * 100).rounded()))%")
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+                .frame(width: 40, alignment: .trailing)
+            Toggle("Border", isOn: Binding(get: { zone.showBorder }, set: { v in appState.mutateZone(id: zone.id) { $0.showBorder = v } }))
+                .toggleStyle(.checkbox).font(.caption)
+            Toggle("Shadow", isOn: Binding(get: { zone.showShadow }, set: { v in appState.mutateZone(id: zone.id) { $0.showShadow = v } }))
+                .toggleStyle(.checkbox).font(.caption)
+        }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 6)
     }
 
     // MARK: - Auto-Sort

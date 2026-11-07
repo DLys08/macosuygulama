@@ -9,7 +9,6 @@ public struct ZoneHeaderView: View {
 
     @State private var isEditingTitle = false
     @State private var editedTitle = ""
-    @State private var isStylePickerPresented = false
     @FocusState private var titleFieldFocused: Bool
 
     public init(zone: ZoneModel) {
@@ -54,9 +53,9 @@ public struct ZoneHeaderView: View {
                                  highlighted: zone.isPinnedOnTop, action: togglePinOnTop)
 
                     headerButton("paintpalette", help: "Theme, colour and transparency") {
-                        isStylePickerPresented.toggle()
+                        controller.isStylePickerPresented.toggle()
                     }
-                    .popover(isPresented: $isStylePickerPresented, arrowEdge: .bottom) {
+                    .popover(isPresented: $controller.isStylePickerPresented, arrowEdge: .bottom) {
                         ZoneStylePickerView(zoneID: zone.id)
                             .environmentObject(appState)
                     }
@@ -127,6 +126,24 @@ public struct ZoneHeaderView: View {
             Button("Reveal in Finder", action: revealInFinder)
             Divider()
         }
+        if (zone.customBackgroundOpacity ?? 1) < ZoneModel.clearModeThreshold {
+            Button("Restore Background") {
+                appState.mutateZone(id: zone.id) {
+                    $0.customBackgroundOpacity = nil
+                    $0.showBorder = true
+                    $0.showShadow = true
+                }
+            }
+        } else {
+            Button("Make Fully Transparent") {
+                appState.mutateZone(id: zone.id) {
+                    $0.customBackgroundOpacity = 0
+                    $0.showBorder = false
+                    $0.showShadow = false
+                }
+            }
+        }
+        Divider()
         Button("Rename Zone…", action: beginRename)
         Button("Delete Zone…") { ZoneActions.confirmDelete(id: zone.id) }
     }

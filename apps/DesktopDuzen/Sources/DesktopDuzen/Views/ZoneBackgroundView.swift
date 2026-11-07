@@ -14,14 +14,15 @@ public struct ZoneBackgroundView: View {
             // Near-invisible floor: a fully transparent window lets clicks and file drops fall
             // through to the desktop, so clear zones keep a 1 % layer to stay interactive.
             Color.black.opacity(0.012)
-            if palette.isClear {
-                palette.tintGradient
-            } else if preview {
+            // Stable structure: layers fade instead of being added/removed.
+            if preview {
                 (palette.isDark ? ZonePalette.darkMaterialBase : ZonePalette.lightMaterialBase).color
+                    .opacity(palette.isClear ? 0 : 1)
             } else {
                 VisualEffectBlur(material: palette.material, appearance: palette.appearance)
+                    .opacity(palette.isClear ? 0 : 1)
             }
-            if !palette.isClear { palette.tintGradient }
+            palette.tintGradient
             if palette.sheen > 0 {
                 // Specular sheen: strongest at the top, fading out by mid-height.
                 LinearGradient(stops: [

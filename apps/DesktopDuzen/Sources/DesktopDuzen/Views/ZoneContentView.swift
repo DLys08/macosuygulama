@@ -292,16 +292,15 @@ public struct ZoneContentView: View {
 
 // MARK: - Shared helpers
 
+/// Always the same view structure; only the shadow strength changes. Switching between two
+/// different structures (if/else) replaced the whole zone subtree when the opacity slider
+/// crossed the clear-mode threshold, which reset the header and closed the style popover.
 struct ClearModeHalo: ViewModifier {
     let active: Bool
     func body(content: Content) -> some View {
-        if active {
-            content
-                .shadow(color: Color.black.opacity(0.9), radius: 1.0, x: 0, y: 0.5)
-                .shadow(color: Color.black.opacity(0.6), radius: 3.0, x: 0, y: 1)
-        } else {
-            content
-        }
+        content
+            .shadow(color: Color.black.opacity(active ? 0.9 : 0), radius: active ? 1.0 : 0, x: 0, y: active ? 0.5 : 0)
+            .shadow(color: Color.black.opacity(active ? 0.6 : 0), radius: active ? 3.0 : 0, x: 0, y: active ? 1 : 0)
     }
 }
 
