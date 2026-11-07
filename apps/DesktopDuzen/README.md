@@ -51,7 +51,7 @@ Desktop behaviour
 ## Build
 
 ```bash
-swift test                      # 51 tests; they use temporary folders only and never touch your Desktop
+swift test                      # 53 tests; they use temporary folders only and never touch your Desktop
 ./scripts/build_app.sh          # builds and signs DesktopDuzen.app (Developer ID if available, else ad-hoc)
 ./scripts/create_dmg.sh         # packages and verifies DesktopDuzen-<version>.dmg
 swift scripts/make_icon.swift Resources && iconutil -c icns Resources/AppIcon.iconset -o Resources/AppIcon.icns

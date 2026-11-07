@@ -641,3 +641,33 @@ final class WidgetThemeTests: XCTestCase {
         XCTAssertFalse(back.showBorder)
     }
 }
+
+final class WidgetSingletonTests: SandboxedTestCase {
+    func testClockCannotBeAddedTwiceButNotesCan() {
+        let state = makeState(createStarter: false)
+        state.widgets = []
+        let first = state.addWidget(DesktopWidget(type: .clock))
+        XCTAssertTrue(first.added)
+        for _ in 0..<10 {
+            let again = state.addWidget(DesktopWidget(type: .clock))
+            XCTAssertFalse(again.added)
+            XCTAssertEqual(again.id, first.id, "returns the existing clock")
+        }
+        XCTAssertTrue(state.addWidget(DesktopWidget(type: .calendar)).added)
+        XCTAssertFalse(state.addWidget(DesktopWidget(type: .calendar)).added)
+        XCTAssertTrue(state.addWidget(DesktopWidget(type: .quickNote)).added)
+        XCTAssertTrue(state.addWidget(DesktopWidget(type: .quickNote)).added, "multiple sticky notes allowed")
+        XCTAssertEqual(state.widgets.filter { $0.type == .clock }.count, 1)
+        XCTAssertEqual(state.widgets.count, 4)
+    }
+
+    func testDuplicateClocksInSavedLayoutAreMergedOnLoad() {
+        let state = makeState(createStarter: false)
+        state.widgets = [DesktopWidget(type: .clock, title: "A"), DesktopWidget(type: .clock, title: "B"),
+                         DesktopWidget(type: .quickNote), DesktopWidget(type: .quickNote), DesktopWidget(type: .clock, title: "C")]
+        state.saveState()
+        let reloaded = makeState(createStarter: false)
+        XCTAssertEqual(reloaded.widgets.filter { $0.type == .clock }.map(\.title), ["A"], "keeps the first clock")
+        XCTAssertEqual(reloaded.widgets.filter { $0.type == .quickNote }.count, 2)
+    }
+}

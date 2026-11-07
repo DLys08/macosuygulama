@@ -298,10 +298,30 @@ public final class AppState: ObservableObject {
         }
         zones = cleanZones
         stickers = dedupe(state.stickers)
-        widgets = dedupe(state.widgets)
+        widgets = AppState.removingDuplicateSingletons(dedupe(state.widgets))
         autoSortRules = state.autoSortRules.isEmpty ? AutoSortRule.defaultRules : dedupe(state.autoSortRules)
         settings = state.settings
         license = state.license
+    }
+
+    /// Keeps the first clock, calendar and monitor; sticky notes are never merged.
+    public static func removingDuplicateSingletons(_ widgets: [DesktopWidget]) -> [DesktopWidget] {
+        var seen = Set<WidgetType>()
+        return widgets.filter { w in
+            guard w.type.isSingleInstance else { return true }
+            return seen.insert(w.type).inserted
+        }
+    }
+
+    /// Adds a widget unless one of a single-instance type already exists.
+    /// Returns the existing widget's id when nothing was added.
+    @discardableResult
+    public func addWidget(_ widget: DesktopWidget) -> (added: Bool, id: UUID) {
+        if widget.type.isSingleInstance, let existing = widgets.first(where: { $0.type == widget.type }) {
+            return (false, existing.id)
+        }
+        widgets.append(widget)
+        return (true, widget.id)
     }
 
     private func dedupe<T: Identifiable>(_ items: [T]) -> [T] where T.ID == UUID {

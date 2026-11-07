@@ -293,6 +293,24 @@ public final class WindowManager: ObservableObject {
         if !state.areAllZonesHidden { panel.orderFront(nil) }
     }
 
+    /// Brings an existing widget into view: onto a visible display if needed, raised for a few seconds.
+    public func focusWidget(id: UUID) {
+        if state.areAllZonesHidden { state.areAllZonesHidden = false }
+        guard let panel = widgetPanels[id] else { return }
+        let onScreen = NSScreen.screens.contains { $0.visibleFrame.intersects(panel.frame.insetBy(dx: 20, dy: 20)) }
+        if !onScreen, let screen = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame {
+            let frame = NSRect(x: screen.midX - panel.frame.width / 2, y: screen.midY - panel.frame.height / 2,
+                               width: panel.frame.width, height: panel.frame.height)
+            panel.setFrame(frame, display: true)
+            commitWidgetFrame(id: id, frame: frame)
+        }
+        panel.level = .floating
+        panel.orderFrontRegardless()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            panel.level = DesktopPanel.desktopLevel
+        }
+    }
+
     public func commitWidgetFrame(id: UUID, frame: NSRect) {
         if let idx = state.widgets.firstIndex(where: { $0.id == id }), state.widgets[idx].frame != frame.integral {
             state.widgets[idx].frame = frame.integral

@@ -65,6 +65,9 @@ public enum WidgetType: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Only one of these can be on the desktop at a time; sticky notes can have many.
+    public var isSingleInstance: Bool { self != .quickNote }
+
     public var defaultSize: CGSize {
         switch self {
         case .clock: return CGSize(width: 220, height: 120)

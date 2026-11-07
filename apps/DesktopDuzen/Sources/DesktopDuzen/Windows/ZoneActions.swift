@@ -192,7 +192,11 @@ public enum ZoneActions {
         let widget = DesktopWidget(type: type, title: type.rawValue,
                                    frame: CGRect(x: screen.minX + 80 + offset, y: screen.minY + 120 + offset,
                                                  width: size.width, height: size.height))
-        state.widgets.append(widget)
+        let result = state.addWidget(widget)
+        if !result.added {
+            // Already on the desktop: show the existing one instead of adding a duplicate.
+            WindowManager.shared.focusWidget(id: result.id)
+        }
     }
 
     public static func addSticker() {
