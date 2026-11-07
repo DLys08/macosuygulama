@@ -817,3 +817,18 @@ final class HoverTitleTests: XCTestCase {
         XCTAssertFalse(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(s)).hideTitleBarsUntilHover)
     }
 }
+
+final class WidgetNameTests: XCTestCase {
+    func testClockIsCalledTimeAndOldLayoutsStillLoad() throws {
+        XCTAssertEqual(WidgetType.clock.displayName, "Time")
+        XCTAssertEqual(WidgetType.clock.rawValue, "Clock & Date", "stored identifier unchanged")
+        for oldTitle in ["Clock & Date", "Desktop Clock"] {
+            let json = #"{"id":"23403662-1920-411F-9F39-EC6862779FF5","type":"Clock & Date","title":"\#(oldTitle)"}"#
+            let w = try JSONDecoder().decode(DesktopWidget.self, from: Data(json.utf8))
+            XCTAssertEqual(w.type, .clock)
+            XCTAssertEqual(w.title, "Time")
+        }
+        let custom = #"{"id":"23403662-1920-411F-9F39-EC6862779FF5","type":"Clock & Date","title":"Istanbul"}"#
+        XCTAssertEqual(try JSONDecoder().decode(DesktopWidget.self, from: Data(custom.utf8)).title, "Istanbul", "custom titles kept")
+    }
+}

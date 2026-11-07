@@ -56,6 +56,16 @@ public enum WidgetType: String, Codable, CaseIterable, Identifiable {
 
     public var id: String { rawValue }
 
+    /// Name shown in the interface. The raw value stays unchanged so saved layouts keep loading.
+    public var displayName: String {
+        switch self {
+        case .clock: return "Time"
+        case .calendar: return "Calendar"
+        case .quickNote: return "Sticky Note"
+        case .systemGlance: return "System Monitor"
+        }
+    }
+
     public var iconName: String {
         switch self {
         case .clock: return "clock.fill"
@@ -124,7 +134,10 @@ public struct DesktopWidget: Identifiable, Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
         type = c.value(.type, default: .clock)
-        title = c.value(.title, default: "Widget")
+        let storedTitle: String = c.value(.title, default: "Widget")
+        // Older default titles are replaced by the short name; custom titles are kept.
+        let legacyDefaults: Set<String> = ["Widget", "Clock & Date", "Desktop Clock", "Mini Calendar"]
+        title = legacyDefaults.contains(storedTitle) ? type.displayName : storedTitle
         var f = c.value(.frame, default: CGRect(x: 300, y: 300, width: 220, height: 160))
         if f.width < 140 { f.size.width = 140 }
         if f.height < 90 { f.size.height = 90 }

@@ -42,7 +42,7 @@ Desktop behaviour
 - Smooth dragging with edge magnetism; grid snapping applies on release. Resize by dragging any edge or corner (no visible handle).
 - Align to Grid snaps every zone to the desktop grid in place; Auto-Align arranges zones in rows on each display.
 - Works across Spaces, sleep/wake and display changes. A zone whose display is disconnected is shown on the main display without losing its saved position.
-- Widgets: clock, calendar, sticky note, real CPU/memory monitor; desktop stickers. Widgets use the same themes and transparency as zones (… menu in the widget header).
+- Widgets: Time (clock), calendar, sticky note, real CPU/memory monitor; desktop stickers. Widgets use the same themes and transparency as zones (… menu in the widget header).
 - Launch at login, menu bar controls, global search across zones (Cmd-Shift-Space).
 
 ## Data and safety
@@ -53,7 +53,7 @@ Desktop behaviour
 ## Build
 
 ```bash
-swift test                      # 64 tests; they use temporary folders only and never touch your Desktop
+swift test                      # 65 tests; they use temporary folders only and never touch your Desktop
 ./scripts/build_app.sh          # builds and signs DesktopDuzen.app (Developer ID if available, else ad-hoc)
 ./scripts/create_dmg.sh         # packages and verifies DesktopDuzen-<version>.dmg
 swift scripts/make_icon.swift Resources && iconutil -c icns Resources/AppIcon.iconset -o Resources/AppIcon.icns

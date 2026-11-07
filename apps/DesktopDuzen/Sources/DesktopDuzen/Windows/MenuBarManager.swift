@@ -77,7 +77,7 @@ public class MenuBarManager: NSObject, NSMenuDelegate {
         // Widgets & Stickers submenu
         let widgetsMenu = NSMenu()
         for widgetType in WidgetType.allCases {
-            let item = NSMenuItem(title: "Add \(widgetType.rawValue)", action: #selector(addWidget(_:)), keyEquivalent: "")
+            let item = NSMenuItem(title: "Add \(widgetType.displayName)", action: #selector(addWidget(_:)), keyEquivalent: "")
             item.representedObject = widgetType
             item.target = self
             item.image = NSImage(systemSymbolName: widgetType.iconName, accessibilityDescription: nil)

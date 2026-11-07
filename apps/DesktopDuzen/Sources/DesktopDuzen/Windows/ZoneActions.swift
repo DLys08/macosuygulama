@@ -189,7 +189,7 @@ public enum ZoneActions {
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let size = type.defaultSize
         let offset = CGFloat(state.widgets.count % 6) * 24
-        let widget = DesktopWidget(type: type, title: type.rawValue,
+        let widget = DesktopWidget(type: type, title: type.displayName,
                                    frame: CGRect(x: screen.minX + 80 + offset, y: screen.minY + 120 + offset,
                                                  width: size.width, height: size.height))
         let result = state.addWidget(widget)

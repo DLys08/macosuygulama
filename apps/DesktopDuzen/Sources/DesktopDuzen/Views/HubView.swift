@@ -20,7 +20,7 @@ public struct HubView: View {
                         actionCard("New File Zone", icon: "folder.badge.plus", tint: .blue) { ZoneActions.createFileZone() }
                         actionCard("Folder Zone", icon: "arrow.up.right.square", tint: .purple) { ZoneActions.createFolderZone() }
                         actionCard("New App Zone", icon: "square.grid.2x2.fill", tint: .teal) { ZoneActions.createAppZone() }
-                        actionCard("Add Clock", icon: "clock.fill", tint: .orange) { ZoneActions.addWidget(.clock) }
+                        actionCard("Add Time", icon: "clock.fill", tint: .orange) { ZoneActions.addWidget(.clock) }
                         actionCard("Sticky Note", icon: "note.text", tint: .yellow) { ZoneActions.addWidget(.quickNote) }
                         actionCard("Auto-Align All", icon: "rectangle.3.group", tint: .green) { appState.autoAlignAllZones() }
                         actionCard("Run Auto-Sort", icon: "bolt.fill", tint: .indigo) { ZoneActions.runAutoSortInteractively() }

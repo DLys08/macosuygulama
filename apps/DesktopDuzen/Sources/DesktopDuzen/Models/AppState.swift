@@ -431,7 +431,7 @@ public final class AppState: ObservableObject {
                                expandedHeight: 220, apps: defaultApps(), themeID: "dark_frost"))
         autoSortRules = AutoSortRule.defaultRules
         license = LicenseStatus(isPro: true, activePlan: .lifetime, isMockProActive: true)
-        widgets.append(DesktopWidget(type: .clock, title: "Desktop Clock",
+        widgets.append(DesktopWidget(type: .clock, title: WidgetType.clock.displayName,
                                      frame: CGRect(x: screen.minX + 60, y: max(screen.minY + 40, topY - 150), width: 220, height: 120)))
     }
 
