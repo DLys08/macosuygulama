@@ -604,3 +604,16 @@ final class ClearModeTests: XCTestCase {
         XCTAssertTrue(zone.showShadow)
     }
 }
+
+final class ZoneTitleTests: XCTestCase {
+    func testInitials() {
+        XCTAssertEqual(ZoneTitle.initials("Quick Launcher"), "QL")
+        XCTAssertEqual(ZoneTitle.initials("Downloads & Media"), "DM")
+        XCTAssertEqual(ZoneTitle.initials("  active   projects "), "AP")
+        XCTAssertEqual(ZoneTitle.initials("Makale Çalışmaları"), "MÇ")
+        XCTAssertEqual(ZoneTitle.initials("ışık işler"), "Iİ", "Turkish casing: ı -> I, i -> İ")
+        XCTAssertEqual(ZoneTitle.initials("One Two Three Four Five"), "OTTF")
+        XCTAssertNil(ZoneTitle.initials("Documents"))
+        XCTAssertNil(ZoneTitle.initials(""))
+    }
+}

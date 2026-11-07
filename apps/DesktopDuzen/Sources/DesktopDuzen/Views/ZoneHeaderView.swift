@@ -37,12 +37,17 @@ public struct ZoneHeaderView: View {
                         .onExitCommand { isEditingTitle = false }
                         .onAppear { titleFieldFocused = true }
                 } else {
-                    Text(zone.title)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(palette.title)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .allowsHitTesting(false)
+                    // Full title when it fits, otherwise initials ("Quick Launcher" -> "QL"),
+                    // otherwise a truncated title. Hovering shows the full name.
+                    ViewThatFits(in: .horizontal) {
+                        titleText(zone.title).fixedSize()
+                        if let initials = ZoneTitle.initials(zone.title) {
+                            titleText(initials).fixedSize()
+                        }
+                        titleText(zone.title).truncationMode(.tail)
+                    }
+                    .allowsHitTesting(false)
+                    .accessibilityLabel(zone.title)
                 }
 
                 Spacer(minLength: 4)
@@ -78,6 +83,7 @@ public struct ZoneHeaderView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .frame(height: zone.collapsedHeight)
+            .help(zone.title)
             .background(
                 WindowDragArea(
                     snap: WindowManager.shared.snapFunction(for: zone.id),
@@ -90,6 +96,13 @@ public struct ZoneHeaderView: View {
                 tabStrip
             }
         }
+    }
+
+    private func titleText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 13, weight: .bold))
+            .foregroundColor(palette.title)
+            .lineLimit(1)
     }
 
     private func headerButton(_ symbol: String, help: String, highlighted: Bool = false, action: @escaping () -> Void) -> some View {
@@ -288,5 +301,20 @@ public struct ZoneHeaderView: View {
             z.tabs.removeAll { $0.id == tab.id }
             if z.activeTabID == tab.id { z.activeTabID = z.tabs.first?.id }
         }
+    }
+}
+
+
+/// Title helpers for narrow zones.
+public enum ZoneTitle {
+    /// Initials of a multi-word title, e.g. "Quick Launcher" -> "QL", "Downloads & Media" -> "DM",
+    /// "my work 2026" -> "MW2". Returns nil for single words (initials would not be meaningful).
+    public static func initials(_ title: String, maxLetters: Int = 4) -> String? {
+        let words = title
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+        guard words.count >= 2 else { return nil }
+        let letters = words.prefix(maxLetters).compactMap { $0.first.map { String($0).uppercased(with: Locale(identifier: "tr_TR")) } }
+        return letters.joined()
     }
 }
