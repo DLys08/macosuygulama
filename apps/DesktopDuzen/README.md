@@ -38,7 +38,7 @@ Appearance
 
 Desktop behaviour
 - Zones sit just above the desktop icons, below app windows. Optionally pin a zone above other windows.
-- Smooth dragging with edge magnetism; grid snapping applies on release. Resize from the corner or any edge.
+- Smooth dragging with edge magnetism; grid snapping applies on release. Resize by dragging any edge or corner (no visible handle).
 - Align to Grid snaps every zone to the desktop grid in place; Auto-Align arranges zones in rows on each display.
 - Works across Spaces, sleep/wake and display changes. A zone whose display is disconnected is shown on the main display without losing its saved position.
 - Widgets: clock, calendar, sticky note, real CPU/memory monitor; desktop stickers. Widgets use the same themes and transparency as zones (… menu in the widget header).

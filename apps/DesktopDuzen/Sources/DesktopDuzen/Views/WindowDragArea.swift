@@ -118,10 +118,6 @@ public struct WindowResizeGrip: NSViewRepresentable {
         public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
         public override var mouseDownCanMoveWindow: Bool { false }
 
-        public override func resetCursorRects() {
-            addCursorRect(bounds, cursor: .crosshair)
-        }
-
         public override func mouseDown(with event: NSEvent) {
             guard let window = window else { return }
             let startMouse = NSEvent.mouseLocation

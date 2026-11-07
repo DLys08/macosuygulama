@@ -39,18 +39,11 @@ public struct ZoneContentView: View {
                 }
 
                 if showBody && !zone.isCollapsed {
-                    ZStack {
-                        WindowResizeGrip(minSize: NSSize(width: 220, height: 120)) { frame in
-                            appState.updateZoneFrame(id: zoneID, frame: frame)
-                        }
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(palette.secondary)
-                            .allowsHitTesting(false)
+                    // Invisible corner resize area (no icon); every edge also resizes.
+                    WindowResizeGrip(minSize: NSSize(width: 220, height: 120)) { frame in
+                        appState.updateZoneFrame(id: zoneID, frame: frame)
                     }
-                    .frame(width: 18, height: 18)
-                    .padding(3)
-                    .help("Drag to resize")
+                    .frame(width: 16, height: 16)
                 }
             }
             .background(ZoneBackgroundView(palette: palette))
