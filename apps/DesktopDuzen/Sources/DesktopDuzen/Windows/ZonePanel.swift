@@ -2,151 +2,150 @@ import Foundation
 import AppKit
 import SwiftUI
 
-public class ZonePanel: NSPanel {
-    public var zoneID: UUID
+// MARK: - Snapping (pure, testable)
+
+public enum Snapping {
+    /// - Parameter includeGrid: false while the pointer is moving (so the window follows the pointer
+    ///   smoothly and only edge-snaps magnetically); true on release to settle onto the grid.
+    public static func snap(_ targetRect: NSRect, otherFrames: [NSRect], settings: AppSettings, includeGrid: Bool = true) -> NSRect {
+        guard settings.alignmentMode else { return targetRect }
+        var snapped = targetRect
+        let threshold = settings.snapThreshold
+        let gap: CGFloat = 12
+        var snappedX = false
+        var snappedY = false
+
+        if settings.snapToNeighbors {
+            for other in otherFrames {
+                if !snappedX {
+                    if abs(snapped.minX - other.minX) < threshold { snapped.origin.x = other.minX; snappedX = true }
+                    else if abs(snapped.minX - (other.maxX + gap)) < threshold { snapped.origin.x = other.maxX + gap; snappedX = true }
+                    else if abs(snapped.maxX - other.maxX) < threshold { snapped.origin.x = other.maxX - snapped.width; snappedX = true }
+                    else if abs(snapped.maxX - (other.minX - gap)) < threshold { snapped.origin.x = other.minX - gap - snapped.width; snappedX = true }
+                }
+                if !snappedY {
+                    if abs(snapped.maxY - other.maxY) < threshold { snapped.origin.y = other.maxY - snapped.height; snappedY = true }
+                    else if abs(snapped.minY - other.minY) < threshold { snapped.origin.y = other.minY; snappedY = true }
+                    else if abs(snapped.maxY - (other.minY - gap)) < threshold { snapped.origin.y = other.minY - gap - snapped.height; snappedY = true }
+                    else if abs(snapped.minY - (other.maxY + gap)) < threshold { snapped.origin.y = other.maxY + gap; snappedY = true }
+                }
+            }
+        }
+        if includeGrid && settings.snapToGrid && settings.gridSize >= 2 {
+            let grid = settings.gridSize
+            if !snappedX { snapped.origin.x = (snapped.origin.x / grid).rounded() * grid }
+            if !snappedY { snapped.origin.y = (snapped.origin.y / grid).rounded() * grid }
+        }
+        return snapped
+    }
+}
+
+// MARK: - Desktop panel base
+
+/// Borderless panel that lives just above the Finder desktop icons, below ordinary app windows.
+public class DesktopPanel: NSPanel, NSWindowDelegate {
+    public static var desktopLevel: NSWindow.Level {
+        NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
+    }
+
+    /// Called after the user finishes moving or resizing the panel with the window edges.
+    public var onFrameCommitted: ((NSRect) -> Void)?
+    public var minimumContentSize = NSSize(width: 140, height: 40)
+
+    public init(contentRect: NSRect, resizable: Bool) {
+        var style: NSWindow.StyleMask = [.borderless, .nonactivatingPanel]
+        if resizable { style.insert(.resizable) }
+        super.init(contentRect: contentRect, styleMask: style, backing: .buffered, defer: false)
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = true
+        isMovableByWindowBackground = false
+        isReleasedWhenClosed = false
+        hidesOnDeactivate = false      // NSPanel hides on deactivate by default; zones must stay visible.
+        isFloatingPanel = false
+        becomesKeyOnlyIfNeeded = false
+        worksWhenModal = true
+        animationBehavior = .none
+        level = DesktopPanel.desktopLevel
+        delegate = self
+    }
+
+    public override var canBecomeKey: Bool { true }
+    public override var canBecomeMain: Bool { false }
+
+    public func applyLevel(pinned: Bool) {
+        let target: NSWindow.Level = pinned ? .floating : DesktopPanel.desktopLevel
+        if level != target { level = target }
+    }
+
+    public func applySpacesBehavior(allSpaces: Bool) {
+        // .stationary and .managed are mutually exclusive, so each mode uses a complete set.
+        let behavior: NSWindow.CollectionBehavior = allSpaces
+            ? [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]
+            : [.managed, .ignoresCycle, .fullScreenNone]
+        if collectionBehavior != behavior { collectionBehavior = behavior }
+    }
+
+    public func windowDidEndLiveResize(_ notification: Notification) {
+        onFrameCommitted?(frame)
+    }
+
+    public func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        NSSize(width: max(frameSize.width, minimumContentSize.width), height: max(frameSize.height, minimumContentSize.height))
+    }
+
+    public override func cancelOperation(_ sender: Any?) {
+        makeFirstResponder(nil)
+    }
+}
+
+// MARK: - Zone panel
+
+public final class ZonePanel: DesktopPanel {
+    public let zoneID: UUID
     private var trackingArea: NSTrackingArea?
-    private var isHoverExpanded = false
-    private var preHoverHeight: CGFloat = 42.0
-    
+    public var onHoverChanged: ((Bool) -> Void)?
+
     public init(zone: ZoneModel, contentRect: NSRect) {
         self.zoneID = zone.id
-        super.init(
-            contentRect: contentRect,
-            styleMask: [.borderless, .resizable, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        
-        self.isOpaque = false
-        self.backgroundColor = .clear
-        self.hasShadow = true
-        self.isMovableByWindowBackground = false
-        self.isReleasedWhenClosed = false
-        
-        updateWindowLevel(isPinnedOnTop: zone.isPinnedOnTop)
-        self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
-        
-        setupTrackingArea()
+        super.init(contentRect: contentRect, resizable: true)
+        minimumContentSize = NSSize(width: 220, height: zone.collapsedHeight)
+        applyLevel(pinned: zone.isPinnedOnTop)
     }
-    
-    public override var canBecomeKey: Bool { true }
-    public override var canBecomeMain: Bool { true }
-    
-    public func updateWindowLevel(isPinnedOnTop: Bool) {
-        if isPinnedOnTop {
-            self.level = .floating
-        } else {
-            self.level = .normal
-            self.orderBack(nil)
-        }
-    }
-    
-    // MARK: - Auto-Expand on Hover
-    
-    private func setupTrackingArea() {
-        if let existing = trackingArea {
-            contentView?.removeTrackingArea(existing)
-        }
+
+    /// Must be called after `contentView` is assigned; earlier builds attached the tracking area to a
+    /// view that was then replaced, so hover-expand never fired.
+    public func installHoverTracking() {
+        if let existing = trackingArea { contentView?.removeTrackingArea(existing) }
         guard let view = contentView else { return }
-        let area = NSTrackingArea(
-            rect: view.bounds,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self, userInfo: nil)
         view.addTrackingArea(area)
-        self.trackingArea = area
+        trackingArea = area
     }
-    
+
     public override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
-        guard let zone = AppState.shared.zones.first(where: { $0.id == zoneID }),
-              zone.isCollapsed && zone.autoExpandOnHover && AppState.shared.canAutoExpand() else {
-            return
-        }
-        
-        if !isHoverExpanded {
-            isHoverExpanded = true
-            preHoverHeight = frame.height
-            var targetFrame = frame
-            let targetHeight = zone.expandedHeight > 60 ? zone.expandedHeight : 260.0
-            targetFrame.origin.y -= (targetHeight - targetFrame.height)
-            targetFrame.size.height = targetHeight
-            
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.22
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                self.animator().setFrame(targetFrame, display: true)
-            }
-        }
+        onHoverChanged?(true)
     }
-    
+
     public override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
-        guard let zone = AppState.shared.zones.first(where: { $0.id == zoneID }),
-              isHoverExpanded && zone.isCollapsed else {
-            return
-        }
-        
-        isHoverExpanded = false
-        var targetFrame = frame
-        let targetHeight = zone.collapsedHeight
-        targetFrame.origin.y += (targetFrame.height - targetHeight)
-        targetFrame.size.height = targetHeight
-        
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.22
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            self.animator().setFrame(targetFrame, display: true)
-        }
+        onHoverChanged?(false)
     }
-    
-    // MARK: - Snapping & Dragging Support
-    
+
+    /// Kept for source compatibility with earlier tests.
     public func snapFrame(_ targetRect: NSRect, otherFrames: [NSRect]) -> NSRect {
-        guard AppState.shared.settings.alignmentMode else { return targetRect }
-        
-        var snapped = targetRect
-        let threshold = AppState.shared.settings.snapThreshold
-        
-        // Snap to other zone edges
-        if AppState.shared.settings.snapToNeighbors {
-            for other in otherFrames {
-                // Snap Left to other's Left
-                if abs(snapped.minX - other.minX) < threshold {
-                    snapped.origin.x = other.minX
-                }
-                // Snap Left to other's Right (adjacent)
-                else if abs(snapped.minX - (other.maxX + 12)) < threshold {
-                    snapped.origin.x = other.maxX + 12
-                }
-                // Snap Right to other's Right
-                else if abs(snapped.maxX - other.maxX) < threshold {
-                    snapped.origin.x = other.maxX - snapped.width
-                }
-                // Snap Right to other's Left (adjacent)
-                else if abs(snapped.maxX - (other.minX - 12)) < threshold {
-                    snapped.origin.x = other.minX - 12 - snapped.width
-                }
-                
-                // Snap Top to other's Top
-                if abs(snapped.maxY - other.maxY) < threshold {
-                    snapped.origin.y = other.maxY - snapped.height
-                }
-                // Snap Bottom to other's Bottom
-                else if abs(snapped.minY - other.minY) < threshold {
-                    snapped.origin.y = other.minY
-                }
-            }
-        }
-        
-        // Snap to Grid
-        if AppState.shared.settings.snapToGrid {
-            let grid = AppState.shared.settings.gridSize
-            snapped.origin.x = round(snapped.origin.x / grid) * grid
-            snapped.origin.y = round(snapped.origin.y / grid) * grid
-        }
-        
-        return snapped
+        Snapping.snap(targetRect, otherFrames: otherFrames, settings: AppState.shared.settings)
+    }
+}
+
+/// Borderless panel that accepts keyboard input (used for global search).
+public final class KeyablePanel: NSPanel {
+    public var onCancel: (() -> Void)?
+    public override var canBecomeKey: Bool { true }
+    public override var canBecomeMain: Bool { true }
+    public override func cancelOperation(_ sender: Any?) {
+        if let onCancel = onCancel { onCancel() } else { orderOut(nil) }
     }
 }

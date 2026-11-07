@@ -2,202 +2,270 @@ import SwiftUI
 import AppKit
 import Combine
 
+/// Widgets always draw on a dark glass background (the panel is forced to Dark Aqua),
+/// so light text is guaranteed to have contrast. Sticky notes use dark text on a light note.
 public struct WidgetContainerView: View {
     @EnvironmentObject var appState: AppState
     let widgetID: UUID
-    
-    private var widget: DesktopWidget? {
-        appState.widgets.first(where: { $0.id == widgetID })
+
+    private var dragArea: some View {
+        WindowDragArea(onDragEnded: { frame in
+            WindowManager.shared.commitWidgetFrame(id: widgetID, frame: frame)
+        })
     }
-    
+
     public var body: some View {
-        if let currentWidget = widget {
+        if let widget = appState.widgets.first(where: { $0.id == widgetID }) {
             VStack(spacing: 0) {
-                // Header (Draggable)
-                HStack {
-                    Image(systemName: currentWidget.type.iconName)
+                HStack(spacing: 6) {
+                    Image(systemName: widget.type.iconName)
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white.opacity(0.8))
-                    Text(currentWidget.title)
+                        .foregroundColor(.white.opacity(0.9))
+                        .allowsHitTesting(false)
+                    Text(widget.title)
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.8))
+                        .foregroundColor(.white.opacity(0.9))
+                        .lineLimit(1)
+                        .allowsHitTesting(false)
                     Spacer()
-                    Button(action: {
-                        appState.widgets.removeAll(where: { $0.id == widgetID })
-                    }) {
+                    Button {
+                        appState.widgets.removeAll { $0.id == widgetID }
+                    } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(.white.opacity(0.6))
+                            .foregroundColor(.white.opacity(0.85))
+                            .frame(width: 16, height: 16)
+                            .background(Circle().fill(Color.white.opacity(0.12)))
                     }
-                    .buttonStyle(PlainButtonStyle())
+                    .buttonStyle(.plain)
+                    .help("Remove widget")
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(Color.black.opacity(0.2))
-                
-                // Widget Body
+                // The drag area must be ABOVE the fill: a Color is hit-testable and used to
+                // swallow every click, so widgets could not be moved at all.
+                .background(
+                    ZStack {
+                        Color.black.opacity(0.25).allowsHitTesting(false)
+                        dragArea
+                    }
+                )
+
                 Group {
-                    switch currentWidget.type {
-                    case .clock:
-                        ClockWidgetView(widget: currentWidget)
-                    case .calendar:
-                        CalendarWidgetView()
-                    case .quickNote:
-                        QuickNoteWidgetView(widgetID: currentWidget.id, initialText: currentWidget.noteContent, colorHex: currentWidget.noteColorHex)
-                            .environmentObject(appState)
-                    case .systemGlance:
-                        SystemMonitorWidgetView()
+                    switch widget.type {
+                    case .clock: ClockWidgetView()
+                    case .calendar: CalendarWidgetView()
+                    case .quickNote: QuickNoteWidgetView(widgetID: widget.id, initialText: widget.noteContent, colorHex: widget.noteColorHex)
+                    case .systemGlance: SystemMonitorWidgetView()
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Display-only widgets can be dragged from anywhere; the note keeps its text editor.
+                .allowsHitTesting(widget.type == .quickNote)
             }
             .background(
-                VisualEffectBlur(material: .hudWindow)
-                    .overlay(Color.black.opacity(0.4))
+                ZStack {
+                    VisualEffectBlur(material: .hudWindow, appearance: NSAppearance(named: .darkAqua))
+                        .allowsHitTesting(false)
+                    Color.black.opacity(0.45).allowsHitTesting(false)
+                    if widget.type != .quickNote { dragArea }
+                }
             )
-            .cornerRadius(14)
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 3)
+            .help(widget.type == .quickNote ? "" : "Drag to move • drag an edge to resize")
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
+            .environment(\.colorScheme, .dark)
         }
     }
 }
 
-// MARK: - Clock Widget
+// MARK: - Clock
 
 public struct ClockWidgetView: View {
-    let widget: DesktopWidget
-    @State private var currentTime = Date()
-    let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
-    
-    private var timeString: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        return formatter.string(from: currentTime)
-    }
-    
-    private var dateString: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE, MMMM d"
-        return formatter.string(from: currentTime)
-    }
-    
+    @State private var now = Date()
+    private let timer = Timer.publish(every: 1, tolerance: 0.2, on: .main, in: .common).autoconnect()
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .medium
+        f.dateStyle = .none
+        return f
+    }()
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("EEEEMMMMd")
+        return f
+    }()
+
     public var body: some View {
         VStack(spacing: 4) {
-            Text(timeString)
-                .font(.system(size: 32, weight: .bold, design: .rounded))
+            Text(Self.timeFormatter.string(from: now))
+                .font(.system(size: 30, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundColor(.white)
-            Text(dateString)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+            Text(Self.dateFormatter.string(from: now))
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.white.opacity(0.75))
+                .foregroundColor(.white.opacity(0.8))
+                .lineLimit(1)
         }
-        .padding(14)
-        .onReceive(timer) { input in
-            currentTime = input
-        }
+        .padding(12)
+        .onReceive(timer) { now = $0 }
     }
 }
 
-// MARK: - Mini Calendar Widget
+// MARK: - Calendar
 
 public struct CalendarWidgetView: View {
-    private let calendar = Calendar.current
-    private let today = Date()
-    
+    @State private var today = Date()
+    private let timer = Timer.publish(every: 600, tolerance: 60, on: .main, in: .common).autoconnect()
+
+    private var calendar: Calendar { Calendar.autoupdatingCurrent }
+
+    private var dayCells: [Int?] {
+        guard let range = calendar.range(of: .day, in: .month, for: today),
+              let first = calendar.date(from: calendar.dateComponents([.year, .month], from: today)) else { return [] }
+        let weekday = calendar.component(.weekday, from: first)
+        let leading = (weekday - calendar.firstWeekday + 7) % 7
+        return Array(repeating: nil, count: leading) + range.map { Optional($0) }
+    }
+
+    private var weekdaySymbols: [String] {
+        let symbols = calendar.veryShortStandaloneWeekdaySymbols
+        let start = calendar.firstWeekday - 1
+        return Array(symbols[start...] + symbols[..<start])
+    }
+
     public var body: some View {
+        let todayNumber = calendar.component(.day, from: today)
         VStack(spacing: 6) {
-            let monthYear = today.formatted(.dateTime.month(.wide).year())
-            Text(monthYear)
+            Text(today.formatted(.dateTime.month(.wide).year()))
                 .font(.system(size: 12, weight: .bold))
                 .foregroundColor(.white)
-            
-            HStack(spacing: 8) {
-                ForEach(["S", "M", "T", "W", "T", "F", "S"], id: \.self) { day in
-                    Text(day)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 3) {
+                ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, symbol in
+                    Text(symbol)
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.white.opacity(0.5))
-                        .frame(width: 16)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                ForEach(Array(dayCells.enumerated()), id: \.offset) { _, day in
+                    if let day = day {
+                        Text("\(day)")
+                            .font(.system(size: 10, weight: day == todayNumber ? .bold : .regular).monospacedDigit())
+                            .foregroundColor(day == todayNumber ? .black : .white)
+                            .frame(width: 20, height: 18)
+                            .background(Circle().fill(day == todayNumber ? Color.white : Color.clear))
+                    } else {
+                        Text(" ").font(.system(size: 10))
+                    }
                 }
             }
-            
-            // Current day highlight
-            let dayNumber = calendar.component(.day, from: today)
-            Text("Today: \(dayNumber)")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.cyan)
         }
         .padding(10)
+        .onReceive(timer) { today = $0 }
     }
 }
 
-// MARK: - Quick Note Widget
+// MARK: - Sticky note
 
 public struct QuickNoteWidgetView: View {
     @EnvironmentObject var appState: AppState
     let widgetID: UUID
-    @State var text: String
+    @State private var text: String
     let colorHex: String
-    
+
     public init(widgetID: UUID, initialText: String, colorHex: String) {
         self.widgetID = widgetID
         self._text = State(initialValue: initialText)
         self.colorHex = colorHex
     }
-    
+
     public var body: some View {
-        VStack(spacing: 4) {
+        // Pick black or white text from the note colour's luminance.
+        let background = RGBAColor(hex: colorHex)
+        let textColor: RGBAColor = RGBAColor.contrastRatio(.black, background) >= RGBAColor.contrastRatio(.white, background) ? RGBAColor(hex: "#1A1A1A") : .white
+        ZStack(alignment: .topLeading) {
+            if text.isEmpty {
+                Text("Type a note…")
+                    .font(.system(size: 12))
+                    .foregroundColor(textColor.color.opacity(0.6))
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 8)
+                    .allowsHitTesting(false)
+            }
             TextEditor(text: $text)
-                .font(.system(size: 12, design: .default))
+                .font(.system(size: 12))
                 .scrollContentBackground(.hidden)
-                .background(Color.clear)
-                .foregroundColor(Color(hex: "#1A1A1A"))
+                .foregroundColor(textColor.color)
                 .padding(8)
                 .onChange(of: text) { newText in
-                    if let idx = appState.widgets.firstIndex(where: { $0.id == widgetID }) {
+                    if let idx = appState.widgets.firstIndex(where: { $0.id == widgetID }), appState.widgets[idx].noteContent != newText {
                         appState.widgets[idx].noteContent = newText
                     }
                 }
         }
-        .background(Color(hex: colorHex))
-        .cornerRadius(8)
+        .environment(\.colorScheme, textColor == .white ? .dark : .light)
+        .background(background.color)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
         .padding(8)
     }
 }
 
-// MARK: - System Monitor Widget
+// MARK: - System monitor (real values)
+
+public final class SystemMonitorModel: ObservableObject {
+    @Published var cpu: Double = 0
+    @Published var memory: Double = 0
+    private let stats = SystemStats()
+    private var timer: Timer?
+
+    func start() {
+        guard timer == nil else { return }
+        _ = stats.cpuUsagePercent() // prime the delta
+        sample()
+        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.sample() }
+        timer?.tolerance = 0.5
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func sample() {
+        cpu = stats.cpuUsagePercent()
+        memory = stats.memoryUsagePercent()
+    }
+
+    deinit { timer?.invalidate() }
+}
 
 public struct SystemMonitorWidgetView: View {
-    @State private var cpuPercent: Int = 18
-    @State private var memoryPercent: Int = 42
-    
+    @StateObject private var model = SystemMonitorModel()
+
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("CPU Load")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
-                Spacer()
-                Text("\(cpuPercent)%")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.green)
-            }
-            ProgressView(value: Double(cpuPercent), total: 100)
-                .accentColor(.green)
-            
-            HStack {
-                Text("Memory")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
-                Spacer()
-                Text("\(memoryPercent)%")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.cyan)
-            }
-            ProgressView(value: Double(memoryPercent), total: 100)
-                .accentColor(.cyan)
+            meter("CPU", value: model.cpu, tint: .green)
+            meter("Memory", value: model.memory, tint: .cyan)
         }
         .padding(14)
+        .onAppear { model.start() }
+        .onDisappear { model.stop() }
+    }
+
+    private func meter(_ title: String, value: Double, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.9))
+                Spacer()
+                Text("\(Int(value.rounded()))%")
+                    .font(.system(size: 11, weight: .bold).monospacedDigit())
+                    .foregroundColor(.white)
+            }
+            ProgressView(value: min(max(value, 0), 100), total: 100)
+                .tint(tint)
+        }
     }
 }

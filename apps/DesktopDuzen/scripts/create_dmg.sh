@@ -1,64 +1,47 @@
 #!/bin/bash
-set -e
+# Packages an already-built DesktopDuzen.app into a compressed, signed DMG and verifies it.
+# Run scripts/build_app.sh first (or pass --build).
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-DMG_PATH="$PROJECT_DIR/DesktopDuzen.dmg"
-TEMP_DMG_DIR="/tmp/DesktopDuzen_dmg_root"
+APP="$PROJECT_DIR/DesktopDuzen.app"
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist" 2>/dev/null || echo 1.0)"
+DMG_PATH="$PROJECT_DIR/DesktopDuzen-$VERSION.dmg"
+STAGE="$(mktemp -d /tmp/DesktopDuzen_dmg.XXXXXX)"
+IDENTITY="${DD_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | grep -m1 'Developer ID Application' | sed -E 's/.*"(.*)"/\1/' || true)}"
 
-echo "==> 1. Ensuring DesktopDuzen.app is built..."
-"$SCRIPT_DIR/build_app.sh"
+if [ "${1:-}" = "--build" ] || [ ! -d "$APP" ]; then
+    "$SCRIPT_DIR/build_app.sh"
+fi
+codesign --verify --strict "$APP"
 
-echo "==> 2. Preparing DMG staging area..."
-rm -rf "$TEMP_DMG_DIR"
-mkdir -p "$TEMP_DMG_DIR"
-
-# Copy App to staging
-cp -R "$PROJECT_DIR/DesktopDuzen.app" "$TEMP_DMG_DIR/"
-
-# Create /Applications symlink for drag-and-drop install
-ln -s /Applications "$TEMP_DMG_DIR/Applications"
-
-# Add custom background or Readme if needed
-cat << 'EOF' > "$TEMP_DMG_DIR/QuickStart.txt"
+echo "==> Staging"
+ditto "$APP" "$STAGE/DesktopDüzen.app"
+ln -s /Applications "$STAGE/Applications"
+cat > "$STAGE/Read Me.txt" <<'EOF'
 DesktopDüzen
-============================
-To install DesktopDüzen:
-Drag the DesktopDüzen icon into your Applications folder.
-
-Once launched, DesktopDüzen lives in your top menu bar
-and pins customizable file, folder, and app zones directly
-onto your macOS desktop wallpaper.
-
-Enjoy a clean, focused Mac desktop!
+Drag DesktopDüzen onto the Applications folder, then open it from Applications.
+Zones live on your Desktop; zone folders are kept in ~/Desktop/Zones.
+Your layout is stored in ~/Library/Application Support/DesktopDuzen/state.json.
 EOF
 
-echo "==> 3. Creating compressed DMG image ($DMG_PATH)..."
+echo "==> Creating $DMG_PATH"
 rm -f "$DMG_PATH"
+hdiutil create -volname "DesktopDüzen" -srcfolder "$STAGE" -ov -format UDZO -fs HFS+ "$DMG_PATH" >/dev/null
+rm -rf "$STAGE"
 
-hdiutil create \
-    -volname "DesktopDüzen" \
-    -srcfolder "$TEMP_DMG_DIR" \
-    -ov \
-    -format UDZO \
-    "$DMG_PATH"
-
-rm -rf "$TEMP_DMG_DIR"
-
-echo "==> 4. Verifying DMG checksum and mountability..."
-MOUNT_DIR=$(mktemp -d /tmp/desktopduzen_mount.XXXXXX)
-hdiutil attach "$DMG_PATH" -mountpoint "$MOUNT_DIR" -nobrowse -quiet
-
-if [ -d "$MOUNT_DIR/DesktopDüzen.app" ] || [ -d "$MOUNT_DIR/DesktopDuzen.app" ]; then
-    echo "  [OK] App bundle verified inside mounted DMG"
+if [ -n "$IDENTITY" ]; then
+    codesign --force --timestamp --sign "$IDENTITY" "$DMG_PATH" || codesign --force --sign "$IDENTITY" "$DMG_PATH"
 fi
 
-if [ -L "$MOUNT_DIR/Applications" ]; then
-    echo "  [OK] Applications symlink verified"
-fi
-
-hdiutil detach "$MOUNT_DIR" -quiet
-rm -rf "$MOUNT_DIR"
-
-echo "==> DMG successfully created at: $DMG_PATH"
+echo "==> Verifying"
+hdiutil verify "$DMG_PATH" >/dev/null && echo "  [OK] checksum"
+MOUNT="$(mktemp -d /tmp/DesktopDuzen_mount.XXXXXX)"
+hdiutil attach "$DMG_PATH" -mountpoint "$MOUNT" -nobrowse -readonly -quiet
+trap 'hdiutil detach "$MOUNT" -quiet || true' EXIT
+[ -d "$MOUNT/DesktopDüzen.app" ] && echo "  [OK] app bundle present"
+[ -L "$MOUNT/Applications" ] && echo "  [OK] Applications link present"
+codesign --verify --strict "$MOUNT/DesktopDüzen.app" && echo "  [OK] app signature valid inside DMG"
+echo "==> $DMG_PATH"
 ls -lh "$DMG_PATH"

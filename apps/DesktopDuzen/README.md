@@ -1,144 +1,73 @@
-# DesktopDüzen (DesktopDuzen)
+# DesktopDüzen
 
-A native macOS productivity utility that organizes your desktop into interactive, customizable "zones" pinned directly to your wallpaper canvas. Full feature parity replica of **Desktop Organizer - File Zones** with all Free and Pro capabilities unlocked.
+A native macOS desktop organizer. DesktopDüzen places glass "zones" on your desktop that hold files, mirror folders, or launch apps, so the Desktop stays tidy without hiding anything from Finder.
 
----
+Version 1.1.0 · macOS 13 or later · Apple silicon · Swift, AppKit, SwiftUI · MIT
 
-## 🌟 Key Features (Full Normal & Pro Parity)
+![DesktopDüzen icon](Resources/AppIcon-1024.png)
 
-### 1. Three Zone Types
-* **File Zones (Backing Directory in `~/Desktop/Zones`)**:
-  - Automatically creates a real folder.
-  - Dragging files from the desktop or Finder moves them into the zone folder.
-  - Dragging files out provides system drag promises (`NSItemProvider`) to Finder, other apps, or email.
-  - Real-time **two-way sync** with the filesystem using kernel event monitoring (`DispatchSourceFileSystemObject`).
-  - Safe rename: Renaming a zone on your desktop renames the backing folder on disk safely.
-  - Safe delete: Offers 3 explicit choices:
-    1. *Move files back to Desktop and remove zone*
-    2. *Move zone folder to Trash*
-    3. *Keep folder on disk (remove desktop window only)*
-  - Intelligent name collision handling (Keep Both with auto-indexing `file 1.ext`, Replace, or Skip).
+## Download
 
-* **Folder Zones (Quick Access / Folder Portals)**:
-  - Mirror any directory on your Mac (e.g., `~/Downloads`, `~/Documents`, custom projects).
-  - Security-scoped bookmark persistence across app relaunch.
-  - Does not move the source folder; acts as a live desktop portal into that folder.
+[DesktopDuzen.dmg](DesktopDuzen.dmg). Open it and drag DesktopDüzen into Applications.
 
-* **App Zones (Quick Launcher)**:
-  - Add apps via right-click or drag-dropping `.app` bundles.
-  - 1-click instant app launch.
-  - Friendly notification toast if a user drops a non-app file into an App Zone: *"App Zones only store application shortcuts (.app). To store documents, create a File Zone!"*
+The app is signed with a Developer ID but not yet notarized. On first launch, right-click the app and choose Open, or allow it in System Settings > Privacy & Security.
 
----
+## Features
 
-### 2. Canvas & Window Mechanics
-* **Pinned Behind All Apps**:
-  - Windows are borderless `NSPanel` instances pinned at the desktop layer below normal application windows.
-  - Visible on all Spaces (`canJoinAllSpaces`, `stationary`, `ignoresCycle`, `fullScreenAuxiliary`).
-  - Does not clutter the Dock or Cmd+Tab app switcher (`LSUIElement = true`).
-  - Multi-display recovery: if an external display is disconnected, off-screen zones re-anchor to the visible display.
+Zone types
+- File Zones keep their files in a real folder, `~/Desktop/Zones/<zone name>`, so everything stays visible and searchable in Finder.
+- Folder Zones show any existing folder (Downloads, a project, an external drive) without moving it. They follow the folder if it is renamed or moved.
+- App Zones are one-click launchers for applications.
 
-* **Layout & Sizing**:
-  - Freely move by dragging the header or background.
-  - Resize handles for corners and edges.
-  - **Accordion Rollup / Collapse**: Click the chevron to collapse a zone into just its title bar.
-  - **Auto-Expand on Hover (Pro)**: When mouse hovers over a collapsed zone, it automatically unrolls; mouse leave rolls it back up.
-  - **Pin on Top (Pro)**: Toggle a zone between Desktop level and Floating/Always-on-top level.
-  - **Multi-Tab Zones (Pro)**: Add tabs inside a single zone (e.g. "Active", "Review", "Archive"), backed by subfolders.
-  - **Alignment Snapping**: Snaps to neighbor zone edges (left, right, top, bottom) and grid.
-  - **Auto-Align All Zones**: Arranges all desktop zones into a clean grid with one click.
+Files
+- Live updates when files are added, renamed, moved or deleted in Finder. No restart needed.
+- Double-click to open, Space for Quick Look, Return/Cmd-O to open the selection, Cmd-Delete to move to Trash (with confirmation).
+- Drag files in from the Desktop or Finder. Moves within a volume, copies across volumes, and Option-drag always copies.
+- Icon and list views, eight sort orders, drag-to-reorder in manual mode, and tabs (subfolders).
+- Nothing is ever overwritten: name clashes get a number. Deleting a zone asks first, and its default keeps your files on disk.
+- A missing folder (renamed, deleted, ejected drive) is shown as unavailable and reconnects automatically when it returns.
 
----
+Auto-sort
+- Rules route loose Desktop files into zones by extension. Each rule has an editable extension list and target zone.
+- "Run Sort Now" previews what will move and offers to create missing zones. Optional continuous sorting waits until a file has finished saving.
 
-### 3. Views, Actions & Quick Look
-* **View Modes**:
-  - **Icon View**: High-resolution thumbnails and file icons (via `QLThumbnailGenerator`).
-  - **List View**: Sortable columns for Name, Date Modified, Kind, and Size.
-  - Adjustable icon size (32px - 84px), icon spacing, and font size.
-  - Sorting: Manual drag-to-sort, Name (A-Z / Z-A), Date Modified, Size, and Kind.
-* **Actions**:
-  - Double-click to open in default app.
-  - Spacebar for instant **Quick Look** preview (`QLPreviewPanel`).
-  - Context menu: Open, Quick Look, Reveal in Finder, Rename, Duplicate, Move to Another Zone, Move to Trash.
-  - Multi-selection via Shift+click and Cmd+click.
+Appearance
+- 27 themes across Liquid Glass, Classic, Gradient, Solid and Accessibility, plus a custom colour and transparency per zone.
+- Text colour is computed from the zone's actual background (every gradient stop and the sheen) and always meets WCAG AA contrast (4.5:1) in Light and Dark Mode.
 
----
+Desktop behaviour
+- Zones sit just above the desktop icons, below app windows. Optionally pin a zone above other windows.
+- Smooth dragging with edge magnetism; grid snapping applies on release. Resize from the corner or any edge.
+- Works across Spaces, sleep/wake and display changes. A zone whose display is disconnected is shown on the main display without losing its saved position.
+- Widgets: clock, calendar, sticky note, real CPU/memory monitor; desktop stickers.
+- Launch at login, menu bar controls, global search across zones (Cmd-Shift-Space).
 
-### 4. 11 Zone Themes & Customization
-1. **Liquid Glass** (Translucent vibrant glass with hairline border)
-2. **Dark Frost** (Deep frosted obsidian)
-3. **Light Frost** (Clean bright frosted paper)
-4. **Slate Titanium** (Industrial space gray)
-5. **Minimal Line** (Ultra-thin wireframe outline)
-6. **Aurora Glow (Pro)** (Violet/indigo/cyan gradient glow)
-7. **Sunset Coral (Pro)** (Warm amber-rose glass)
-8. **Emerald Forest (Pro)** (Mint/emerald translucent tone)
-9. **Cyberpunk Neon (Pro)** (Electric cyan & magenta border)
-10. **Rose Quartz (Pro)** (Soft pink-champagne luxury)
-11. **Matrix Terminal (Pro)** (CRT green phosphorescent theme)
+## Data and safety
 
----
+- The layout is stored in `~/Library/Application Support/DesktopDuzen/state.json`. An unreadable file is kept as a backup, never silently overwritten.
+- The app moves files only when you drag them, run a sort, or enable continuous sorting.
 
-### 5. Desktop Stickers & Widgets
-* **Desktop Stickers**: Add decorative emojis and badges (`🚀`, `☕️`, `⭐️`, `🔥`, `🪴`, etc.) directly on the desktop canvas.
-* **Desktop Widgets**:
-  - **Clock & Date Widget**: Live digital or analog time.
-  - **Mini Calendar Widget**: Month glance with current day highlighted.
-  - **Sticky Notes Widget**: Editable quick note with custom color palettes.
-  - **System Monitor Widget**: Live CPU load and memory pressure glance.
+## Build
 
----
-
-### 6. Smart Auto-Sort Rules
-* Monitor `~/Desktop` continuously and automatically move loose files into matching zones:
-  - Images (`png`, `jpg`, `heic`, `gif`, `svg`) ➔ Media Zone
-  - Documents (`pdf`, `docx`, `txt`, `xlsx`, `md`) ➔ Documents Zone
-  - Installers & Archives (`dmg`, `pkg`, `zip`, `tar`) ➔ Downloads Zone
-  - Audio & Video (`mp4`, `mov`, `mp3`, `wav`) ➔ Media Zone
-* Run on demand or automatically in the background.
-
----
-
-### 7. Global Search
-* Press **Cmd + Shift + Space** or select from the status bar menu to open the Spotlight-style search modal.
-* Searches across all zones instantly, displaying matching files, file size, thumbnail, and 1-click reveal in Finder.
-
----
-
-### 8. Pro Paywall & In-App Simulator
-* Pricing plans: Monthly ($1.99), Annual ($19.99), Lifetime ($24.99).
-* Includes a testing toggle in Settings and the Paywall to easily toggle between **Free Tier** (limits to 3 zones, basic themes, single tab) and **Pro Tier** (unlimited zones, tabs, widgets, auto-sort, custom themes).
-
----
-
-## 📦 DMG Installer & Packaging
-
-### Build the DMG:
 ```bash
-cd /Users/darwin/.gemini/antigravity/scratch/DesktopDuzen
-./scripts/create_dmg.sh
-```
-This generates `DesktopDuzen.dmg` with:
-- `DesktopDuzen.app` (signed binary with customized App Icon)
-- `/Applications` drag-and-drop symlink
-- `QuickStart.txt` setup guide
-- High-compression UDZO DMG format
-
-### Run the App:
-```bash
-open DesktopDuzen.app
+swift test                      # 45 tests; they use temporary folders only and never touch your Desktop
+./scripts/build_app.sh          # builds and signs DesktopDuzen.app (Developer ID if available, else ad-hoc)
+./scripts/create_dmg.sh         # packages and verifies DesktopDuzen-<version>.dmg
+swift scripts/make_icon.swift Resources && iconutil -c icns Resources/AppIcon.iconset -o Resources/AppIcon.icns
 ```
 
-### Run Automated Unit Tests:
-```bash
-swift test
-```
-All 9 unit tests verify:
-- Theme resolution & custom styling
-- Folder sanitization & security scoping
-- Multi-tab folder path resolution
-- Pro tier entitlement gates
-- Export & Import JSON configurations
-- File collision handling (`keepBoth`, `replace`, `skip`)
-- Auto-sort rule evaluation
-- Alignment & neighbor snapping math
+## Changes in 1.1.0
+
+- Fixed duplicate "Active Projects N" folders, which the tests had been creating on the real Desktop.
+- Fixed the layout being silently reset when the state file could not be read.
+- Fixed zone dragging (jumps, trembling) and resizing (runaway growth); fixed Auto-Align not moving zones; removed z-order flicker.
+- Fixed unreadable white text on light themes and in the Hub in Light Mode.
+- Fixed "Duplicate" renaming files instead of copying them; zone deletion now confirms and never permanently deletes.
+- Fixed auto-sort finding no target zones; added a rule editor and preview.
+- Fixed widgets that could not be moved; the search field now accepts typing.
+- Launch at login and "show on all Spaces" now work.
+- Added liquid glass themes, a new icon, and an About screen.
+
+## Author
+
+Developed by SoftAI Yazılım, Assoc. Prof. Dr. Mehmet Akif Cifci ([@themanoftalent](https://github.com/themanoftalent)).

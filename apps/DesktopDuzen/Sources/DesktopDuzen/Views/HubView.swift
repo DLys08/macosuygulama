@@ -1,290 +1,190 @@
 import SwiftUI
 import AppKit
 
+/// Uses only semantic system colours, so it follows Light, Dark and automatic appearance.
 public struct HubView: View {
     @EnvironmentObject var appState: AppState
-    @State private var newZoneTitle: String = ""
-    @State private var isCreatingZone: Bool = false
-    
+
     public var body: some View {
         VStack(spacing: 0) {
-            // Header Bar
-            HStack(spacing: 12) {
-                Image(systemName: "square.grid.2x2.fill")
-                    .font(.system(size: 28))
-                    .foregroundColor(.cyan)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 8) {
-                        Text("DesktopDüzen Hub")
-                            .font(.system(size: 18, weight: .bold))
-                        
-                        Text(appState.isPro ? "★ PRO ACTIVE" : "FREE TIER")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(appState.isPro ? .green : .orange)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(appState.isPro ? Color.green.opacity(0.15) : Color.orange.opacity(0.15))
-                            .cornerRadius(4)
-                    }
-                    
-                    Text("Manage and customize your macOS desktop zones and widgets")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                Button(action: { WindowManager.shared.showSettings() }) {
-                    Label("Settings", systemImage: "gearshape")
-                }
-                .buttonStyle(.bordered)
-            }
-            .padding(18)
-            .background(Color.white.opacity(0.04))
-            
+            header
             Divider()
-            
-            // Quick Action Buttons Grid
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 18) {
+                    if let recovered = appState.recoveredCorruptStateFile {
+                        recoveryNotice(recovered)
+                    }
                     Text("Quick Actions")
-                        .font(.system(size: 13, weight: .bold))
-                    
+                        .font(.headline)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 12)], spacing: 12) {
-                        actionCard(title: "New File Zone", icon: "folder.badge.plus", color: .blue) {
-                            promptCreateFileZone()
-                        }
-                        
-                        actionCard(title: "Folder Zone", icon: "arrow.up.right.square", color: .purple) {
-                            promptCreateFolderZone()
-                        }
-                        
-                        actionCard(title: "New App Zone", icon: "square.grid.2x2.fill", color: .cyan) {
-                            promptCreateAppZone()
-                        }
-                        
-                        actionCard(title: "Add Clock", icon: "clock.fill", color: .orange) {
-                            addClockWidget()
-                        }
-                        
-                        actionCard(title: "Sticky Note", icon: "note.text", color: .yellow) {
-                            addStickyNoteWidget()
-                        }
-                        
-                        actionCard(title: "Auto-Align All", icon: "rectangle.3.group", color: .green) {
-                            appState.autoAlignAllZones()
-                        }
-                        
-                        actionCard(title: "Run Auto-Sort", icon: "bolt.fill", color: .indigo) {
-                            runAutoSortNow()
-                        }
-                        
-                        actionCard(title: "Search Zones", icon: "magnifyingglass", color: .pink) {
-                            WindowManager.shared.toggleGlobalSearch()
-                        }
+                        actionCard("New File Zone", icon: "folder.badge.plus", tint: .blue) { ZoneActions.createFileZone() }
+                        actionCard("Folder Zone", icon: "arrow.up.right.square", tint: .purple) { ZoneActions.createFolderZone() }
+                        actionCard("New App Zone", icon: "square.grid.2x2.fill", tint: .teal) { ZoneActions.createAppZone() }
+                        actionCard("Add Clock", icon: "clock.fill", tint: .orange) { ZoneActions.addWidget(.clock) }
+                        actionCard("Sticky Note", icon: "note.text", tint: .yellow) { ZoneActions.addWidget(.quickNote) }
+                        actionCard("Auto-Align All", icon: "rectangle.3.group", tint: .green) { appState.autoAlignAllZones() }
+                        actionCard("Run Auto-Sort", icon: "bolt.fill", tint: .indigo) { ZoneActions.runAutoSortInteractively() }
+                        actionCard("Search Zones", icon: "magnifyingglass", tint: .pink) { WindowManager.shared.toggleGlobalSearch() }
                     }
-                    
-                    Divider().padding(.vertical, 4)
-                    
-                    // Active Zones List
+
+                    Divider().padding(.vertical, 2)
+
                     HStack {
-                        Text("Active Desktop Zones (\(appState.zones.count))")
-                            .font(.system(size: 13, weight: .bold))
+                        Text("Desktop Zones (\(appState.zones.count))")
+                            .font(.headline)
                         Spacer()
-                        Button("Align Grid") {
-                            appState.autoAlignAllZones()
+                        Button(appState.areAllZonesHidden ? "Show All" : "Hide All") {
+                            appState.areAllZonesHidden.toggle()
                         }
-                        .buttonStyle(.bordered)
                         .controlSize(.small)
+                        Button("Align Grid") { appState.autoAlignAllZones() }
+                            .controlSize(.small)
                     }
-                    
+
                     if appState.zones.isEmpty {
                         VStack(spacing: 8) {
                             Image(systemName: "tray")
-                                .font(.system(size: 32))
+                                .font(.system(size: 30))
                                 .foregroundColor(.secondary)
-                            Text("No zones active. Click '+ New File Zone' above to create one!")
-                                .font(.system(size: 12))
+                            Text("No zones yet. Use “New File Zone” above to create one.")
+                                .font(.callout)
                                 .foregroundColor(.secondary)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(24)
-                        .background(Color.white.opacity(0.02))
-                        .cornerRadius(10)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
                     } else {
                         VStack(spacing: 8) {
                             ForEach(appState.zones) { zone in
-                                HStack(spacing: 12) {
-                                    Image(systemName: zone.type.iconName)
-                                        .font(.system(size: 18))
-                                        .foregroundColor(.cyan)
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(zone.title)
-                                            .font(.system(size: 13, weight: .semibold))
-                                        Text("\(zone.type.rawValue) • \(zone.viewMode.rawValue) View • \(zone.isPinnedOnTop ? "Pinned on Top" : "Desktop Level")")
-                                            .font(.system(size: 10))
-                                            .foregroundColor(.secondary)
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    if zone.type != .app {
-                                        Button("Reveal Folder") {
-                                            let url = URL(fileURLWithPath: zone.resolvedFolderPath)
-                                            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: url.path)
-                                        }
-                                        .buttonStyle(.bordered)
-                                        .controlSize(.small)
-                                    }
-                                    
-                                    Button("Focus") {
-                                        if let panel = NSApp.windows.first(where: { ($0 as? ZonePanel)?.zoneID == zone.id }) {
-                                            panel.makeKeyAndOrderFront(nil)
-                                        }
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.small)
-                                    
-                                    Button(role: .destructive, action: {
-                                        appState.deleteZone(id: zone.id, action: .moveFilesToDesktop)
-                                    }) {
-                                        Image(systemName: "trash")
-                                            .foregroundColor(.red)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                .padding(10)
-                                .background(Color.white.opacity(0.05))
-                                .cornerRadius(8)
+                                zoneRow(zone)
                             }
                         }
                     }
                 }
                 .padding(20)
             }
-            
             Divider()
-            
-            // Footer
-            HStack {
-                Text("DesktopDüzen is running. Click status icon in menu bar or right-click any zone to customize.")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                Spacer()
-                Button("Close Hub") {
-                    NSApp.keyWindow?.orderOut(nil)
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
-            .background(Color.white.opacity(0.03))
+            footer
         }
-        .frame(width: 680, height: 540)
+        .frame(minWidth: 620, minHeight: 460)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
-    
-    @ViewBuilder
-    private func actionCard(title: String, icon: String, color: Color, action: @escaping () -> Void) -> some View {
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "square.grid.2x2.fill")
+                .font(.system(size: 28))
+                .foregroundColor(.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    Text("DesktopDüzen Hub")
+                        .font(.title2.weight(.bold))
+                        .foregroundColor(.primary)
+                    Text(appState.isPro ? "PRO" : "FREE")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        // Dark fills keep white badge text above 4.5:1 in both appearances.
+                        .background(Capsule().fill(appState.isPro ? Color(red: 0.09, green: 0.47, blue: 0.20) : Color(red: 0.66, green: 0.33, blue: 0.0)))
+                }
+                Text("Manage your desktop zones, widgets and sorting rules")
+                    .font(.callout)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            Button { WindowManager.shared.showSettings() } label: { Label("Settings", systemImage: "gearshape") }
+        }
+        .padding(18)
+    }
+
+    private var footer: some View {
+        HStack {
+            Text("DesktopDüzen keeps running from the menu bar. Right-click a file in a zone for more actions.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+            Spacer()
+            Button("Close Hub") { WindowManager.shared.closeHub() }
+                .keyboardShortcut(.cancelAction)
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
+    }
+
+    private func recoveryNotice(_ url: URL) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Your previous layout file could not be read.")
+                    .font(.callout.weight(.semibold))
+                Text("It was kept as \(url.lastPathComponent) and a default layout was created. No files were changed.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                    .controlSize(.small)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.orange.opacity(0.12)))
+    }
+
+    private func actionCard(_ title: String, icon: String, tint: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(color)
-                
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(tint)
                 Text(title)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.white)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.primary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .padding(.vertical, 14)
             .padding(.horizontal, 8)
-            .background(Color.white.opacity(0.06))
-            .cornerRadius(10)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-            )
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1))
+            .contentShape(Rectangle())
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
     }
-    
-    // MARK: - Actions
-    
-    private func promptCreateFileZone() {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "New File Zone"
-        alert.informativeText = "Enter name for the new File Zone:"
-        alert.addButton(withTitle: "Create")
-        alert.addButton(withTitle: "Cancel")
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
-        input.stringValue = "New Zone"
-        alert.accessoryView = input
-        if alert.runModal() == .alertFirstButtonReturn {
-            let name = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            _ = appState.createDefaultFileZone(title: name.isEmpty ? "New Zone" : name)
+
+    private func zoneRow(_ zone: ZoneModel) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: zone.type.iconName)
+                .font(.system(size: 18))
+                .foregroundColor(.accentColor)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(zone.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.primary)
+                Text("\(zone.type.rawValue) • \(zone.viewMode.rawValue) view • \(zone.isPinnedOnTop ? "Pinned on top" : "Desktop level")")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            if zone.type != .app {
+                Button("Reveal Folder") {
+                    let url = URL(fileURLWithPath: zone.resolvedFolderPath)
+                    if FileManager.default.fileExists(atPath: url.path) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                }
+                .controlSize(.small)
+            }
+            Button("Show") { WindowManager.shared.focusZone(id: zone.id) }
+                .controlSize(.small)
+                .help("Bring this zone to the front for a few seconds")
+            Button { ZoneActions.confirmDelete(id: zone.id) } label: {
+                Image(systemName: "trash").foregroundColor(.red)
+            }
+            .buttonStyle(.borderless)
+            .help("Remove zone…")
         }
-    }
-    
-    private func promptCreateFolderZone() {
-        NSApp.activate(ignoringOtherApps: true)
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.prompt = "Choose Folder"
-        if panel.runModal() == .OK, let url = panel.url {
-            _ = appState.createFolderZone(title: url.lastPathComponent, folderURL: url)
-        }
-    }
-    
-    private func promptCreateAppZone() {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "New App Zone"
-        alert.informativeText = "Enter name for App Zone:"
-        alert.addButton(withTitle: "Create")
-        alert.addButton(withTitle: "Cancel")
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
-        input.stringValue = "App Launcher"
-        alert.accessoryView = input
-        if alert.runModal() == .alertFirstButtonReturn {
-            let name = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            _ = appState.createAppZone(title: name.isEmpty ? "App Launcher" : name)
-        }
-    }
-    
-    private func addClockWidget() {
-        let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let widget = DesktopWidget(
-            type: .clock,
-            title: "Desktop Clock",
-            frame: CGRect(x: screen.minX + 60, y: screen.minY + 120, width: 220, height: 120)
-        )
-        appState.widgets.append(widget)
-    }
-    
-    private func addStickyNoteWidget() {
-        let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let widget = DesktopWidget(
-            type: .quickNote,
-            title: "Quick Note",
-            frame: CGRect(x: screen.minX + 300, y: screen.minY + 120, width: 220, height: 160)
-        )
-        appState.widgets.append(widget)
-    }
-    
-    private func runAutoSortNow() {
-        let count = AutoSortService.shared.runAutoSort(
-            rules: appState.autoSortRules,
-            zones: appState.zones,
-            isPro: appState.isPro
-        )
-        let alert = NSAlert()
-        alert.messageText = "Auto-Sort Complete"
-        alert.informativeText = "Organized \(count) file(s) on Desktop."
-        alert.runModal()
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
     }
 }

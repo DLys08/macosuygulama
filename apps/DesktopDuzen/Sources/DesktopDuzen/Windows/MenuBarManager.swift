@@ -1,7 +1,7 @@
 import Foundation
 import AppKit
 
-public class MenuBarManager: NSObject {
+public class MenuBarManager: NSObject, NSMenuDelegate {
     public static let shared = MenuBarManager()
     
     private var statusItem: NSStatusItem?
@@ -14,14 +14,27 @@ public class MenuBarManager: NSObject {
             let image = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: "DesktopDüzen")
             image?.isTemplate = true
             button.image = image
-            button.toolTip = "DesktopDüzen - File Zones"
+            button.toolTip = "DesktopDüzen"
         }
         
         rebuildMenu()
     }
     
+    // Rebuild every time the menu opens so titles and check marks always reflect current state.
+    public func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === statusItem?.menu else { return }
+        populate(menu)
+    }
+    
     public func rebuildMenu() {
-        let menu = NSMenu()
+        let menu = statusItem?.menu ?? NSMenu()
+        menu.delegate = self
+        populate(menu)
+        statusItem?.menu = menu
+    }
+    
+    private func populate(_ menu: NSMenu) {
+        menu.removeAllItems()
         
         // Header info
         let titleItem = NSMenuItem(title: "DesktopDüzen", action: nil, keyEquivalent: "")
@@ -89,7 +102,7 @@ public class MenuBarManager: NSObject {
         alignItem.image = NSImage(systemSymbolName: "rectangle.3.group", accessibilityDescription: nil)
         menu.addItem(alignItem)
         
-        let snapState = AppState.shared.settings.alignmentMode ? "Disable Grid Snapping" : "Enable Grid Snapping"
+        let snapState = "Snap Zones While Dragging"
         let snapItem = NSMenuItem(title: snapState, action: #selector(toggleGridSnapping), keyEquivalent: "")
         snapItem.target = self
         snapItem.state = AppState.shared.settings.alignmentMode ? .on : .off
@@ -100,7 +113,7 @@ public class MenuBarManager: NSObject {
         hideZonesItem.target = self
         menu.addItem(hideZonesItem)
         
-        let hideDesktopTitle = AppState.shared.settings.hideLooseDesktopIcons ? "Show Loose Desktop Icons" : "Hide Loose Desktop Icons"
+        let hideDesktopTitle = "Hide Finder Desktop Icons"
         let hideDesktopItem = NSMenuItem(title: hideDesktopTitle, action: #selector(toggleDesktopIcons), keyEquivalent: "")
         hideDesktopItem.target = self
         hideDesktopItem.state = AppState.shared.settings.hideLooseDesktopIcons ? .on : .off
@@ -110,12 +123,12 @@ public class MenuBarManager: NSObject {
         
         // Smart Auto Sort
         let autoSortMenu = NSMenu()
-        let runSortNow = NSMenuItem(title: "Run Auto-Sort Now", action: #selector(runAutoSortNow), keyEquivalent: "s")
+        let runSortNow = NSMenuItem(title: "Run Auto-Sort Now…", action: #selector(runAutoSortNow), keyEquivalent: "s")
         runSortNow.target = self
         runSortNow.image = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: nil)
         autoSortMenu.addItem(runSortNow)
         
-        let autoSortToggle = NSMenuItem(title: "Automatic Sorting on Desktop", action: #selector(toggleAutoSort), keyEquivalent: "")
+        let autoSortToggle = NSMenuItem(title: "Sort New Desktop Files Automatically", action: #selector(toggleAutoSort), keyEquivalent: "")
         autoSortToggle.target = self
         autoSortToggle.state = AppState.shared.settings.autoSortEnabled ? .on : .off
         autoSortMenu.addItem(autoSortToggle)
@@ -147,11 +160,14 @@ public class MenuBarManager: NSObject {
         
         menu.addItem(NSMenuItem.separator())
         
+        let aboutItem = NSMenuItem(title: "About DesktopDüzen", action: #selector(openAbout), keyEquivalent: "")
+        aboutItem.target = self
+        aboutItem.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
+        menu.addItem(aboutItem)
+        
         let quitItem = NSMenuItem(title: "Quit DesktopDüzen", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
-        
-        statusItem?.menu = menu
     }
     
     // MARK: - Actions
@@ -161,91 +177,18 @@ public class MenuBarManager: NSObject {
         WindowManager.shared.showHub()
     }
     
-    @objc private func newFileZone() {
-        NSApp.activate(ignoringOtherApps: true)
-        if !AppState.shared.canAddZone() {
-            WindowManager.shared.showPaywall()
-            return
-        }
-        let alert = NSAlert()
-        alert.messageText = "Create New File Zone"
-        alert.informativeText = "Enter a name for the new File Zone:"
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Create")
-        alert.addButton(withTitle: "Cancel")
-        
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
-        input.stringValue = "New Zone"
-        alert.accessoryView = input
-        
-        if alert.runModal() == .alertFirstButtonReturn {
-            let name = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            _ = AppState.shared.createDefaultFileZone(title: name.isEmpty ? "New Zone" : name)
-        }
-    }
+    @objc private func newFileZone() { ZoneActions.createFileZone() }
     
-    @objc private func newFolderZone() {
-        NSApp.activate(ignoringOtherApps: true)
-        if !AppState.shared.canAddZone() {
-            WindowManager.shared.showPaywall()
-            return
-        }
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Select Folder for Zone"
-        panel.message = "Choose an existing folder to mirror onto your desktop:"
-        
-        if panel.runModal() == .OK, let folderURL = panel.url {
-            let title = folderURL.lastPathComponent
-            _ = AppState.shared.createFolderZone(title: title, folderURL: folderURL)
-        }
-    }
+    @objc private func newFolderZone() { ZoneActions.createFolderZone() }
     
-    @objc private func newAppZone() {
-        NSApp.activate(ignoringOtherApps: true)
-        if !AppState.shared.canAddZone() {
-            WindowManager.shared.showPaywall()
-            return
-        }
-        let alert = NSAlert()
-        alert.messageText = "Create New App Zone"
-        alert.informativeText = "Enter a name for the App Launcher zone:"
-        alert.addButton(withTitle: "Create")
-        alert.addButton(withTitle: "Cancel")
-        
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
-        input.stringValue = "App Launcher"
-        alert.accessoryView = input
-        
-        if alert.runModal() == .alertFirstButtonReturn {
-            let name = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            _ = AppState.shared.createAppZone(title: name.isEmpty ? "App Launcher" : name)
-        }
-    }
+    @objc private func newAppZone() { ZoneActions.createAppZone() }
     
     @objc private func addWidget(_ sender: NSMenuItem) {
         guard let widgetType = sender.representedObject as? WidgetType else { return }
-        let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let widget = DesktopWidget(
-            type: widgetType,
-            title: widgetType.rawValue,
-            frame: CGRect(x: screen.minX + 80, y: screen.minY + 120, width: 220, height: 160)
-        )
-        AppState.shared.widgets.append(widget)
+        ZoneActions.addWidget(widgetType)
     }
     
-    @objc private func addSticker() {
-        let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let sampleEmojis = ["🚀", "☕️", "⭐️", "🔥", "📌", "🎉", "💡", "🪴", "🐱", "🎯"]
-        let randomEmoji = sampleEmojis.randomElement() ?? "⭐️"
-        let sticker = DesktopSticker(
-            content: randomEmoji,
-            frame: CGRect(x: screen.midX, y: screen.midY, width: 72, height: 72)
-        )
-        AppState.shared.stickers.append(sticker)
-    }
+    @objc private func addSticker() { ZoneActions.addSticker() }
     
     @objc private func autoAlignAll() {
         AppState.shared.autoAlignAllZones()
@@ -253,63 +196,20 @@ public class MenuBarManager: NSObject {
     
     @objc private func toggleGridSnapping() {
         AppState.shared.settings.alignmentMode.toggle()
-        rebuildMenu()
     }
     
     @objc private func toggleHideAllZones() {
         AppState.shared.areAllZonesHidden.toggle()
-        rebuildMenu()
     }
     
     @objc private func toggleDesktopIcons() {
-        let current = AppState.shared.settings.hideLooseDesktopIcons
-        let target = !current
-        
-        if target {
-            let alert = NSAlert()
-            alert.messageText = "Hide Loose Desktop Icons?"
-            alert.informativeText = "This will hide files lying loose directly on the Desktop wallpaper while keeping your zones visible. Finder will restart briefly."
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "Hide Icons")
-            alert.addButton(withTitle: "Cancel")
-            if alert.runModal() != .alertFirstButtonReturn {
-                return
-            }
-        }
-        
-        DesktopIconManager.shared.setDesktopIconsHidden(target)
-        AppState.shared.settings.hideLooseDesktopIcons = target
-        rebuildMenu()
+        ZoneActions.setDesktopIconsHidden(!AppState.shared.settings.hideLooseDesktopIcons)
     }
     
-    @objc private func runAutoSortNow() {
-        let count = AutoSortService.shared.runAutoSort(
-            rules: AppState.shared.autoSortRules,
-            zones: AppState.shared.zones,
-            isPro: AppState.shared.isPro
-        )
-        let alert = NSAlert()
-        alert.messageText = "Auto-Sort Complete"
-        alert.informativeText = "Organized \(count) file(s) into matching zones."
-        alert.runModal()
-    }
+    @objc private func runAutoSortNow() { ZoneActions.runAutoSortInteractively() }
     
     @objc private func toggleAutoSort() {
-        if !AppState.shared.isPro {
-            WindowManager.shared.showPaywall()
-            return
-        }
-        AppState.shared.settings.autoSortEnabled.toggle()
-        if AppState.shared.settings.autoSortEnabled {
-            AutoSortService.shared.startMonitoring(
-                rules: AppState.shared.autoSortRules,
-                zones: AppState.shared.zones,
-                isPro: AppState.shared.isPro
-            )
-        } else {
-            AutoSortService.shared.stopMonitoring()
-        }
-        rebuildMenu()
+        ZoneActions.setContinuousAutoSort(!AppState.shared.settings.autoSortEnabled)
     }
     
     @objc private func openSearch() {
@@ -326,6 +226,8 @@ public class MenuBarManager: NSObject {
         NSApp.activate(ignoringOtherApps: true)
         WindowManager.shared.showPaywall()
     }
+    
+    @objc private func openAbout() { WindowManager.shared.showAbout() }
     
     @objc private func quitApp() {
         NSApp.terminate(nil)

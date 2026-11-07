@@ -12,7 +12,8 @@ public struct AppSettings: Codable, Equatable {
     public var hideLooseDesktopIcons: Bool
     public var globalHotkeyEnabled: Bool
     public var hasCompletedOnboarding: Bool
-    
+    public var showHubOnLaunch: Bool
+
     public init(
         launchAtLogin: Bool = false,
         alignmentMode: Bool = true,
@@ -24,7 +25,8 @@ public struct AppSettings: Codable, Equatable {
         autoSortEnabled: Bool = false,
         hideLooseDesktopIcons: Bool = false,
         globalHotkeyEnabled: Bool = true,
-        hasCompletedOnboarding: Bool = false
+        hasCompletedOnboarding: Bool = false,
+        showHubOnLaunch: Bool = true
     ) {
         self.launchAtLogin = launchAtLogin
         self.alignmentMode = alignmentMode
@@ -37,6 +39,30 @@ public struct AppSettings: Codable, Equatable {
         self.hideLooseDesktopIcons = hideLooseDesktopIcons
         self.globalHotkeyEnabled = globalHotkeyEnabled
         self.hasCompletedOnboarding = hasCompletedOnboarding
+        self.showHubOnLaunch = showHubOnLaunch
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case launchAtLogin, alignmentMode, snapToGrid, snapToNeighbors, gridSize, snapThreshold
+        case showZonesOnAllSpaces, autoSortEnabled, hideLooseDesktopIcons, globalHotkeyEnabled
+        case hasCompletedOnboarding, showHubOnLaunch
+    }
+
+    public init(from decoder: Decoder) throws {
+        let d = AppSettings()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        launchAtLogin = c.value(.launchAtLogin, default: d.launchAtLogin)
+        alignmentMode = c.value(.alignmentMode, default: d.alignmentMode)
+        snapToGrid = c.value(.snapToGrid, default: d.snapToGrid)
+        snapToNeighbors = c.value(.snapToNeighbors, default: d.snapToNeighbors)
+        gridSize = min(max(c.value(.gridSize, default: d.gridSize), 5), 60)
+        snapThreshold = min(max(c.value(.snapThreshold, default: d.snapThreshold), 2), 40)
+        showZonesOnAllSpaces = c.value(.showZonesOnAllSpaces, default: d.showZonesOnAllSpaces)
+        autoSortEnabled = c.value(.autoSortEnabled, default: d.autoSortEnabled)
+        hideLooseDesktopIcons = c.value(.hideLooseDesktopIcons, default: d.hideLooseDesktopIcons)
+        globalHotkeyEnabled = c.value(.globalHotkeyEnabled, default: d.globalHotkeyEnabled)
+        hasCompletedOnboarding = c.value(.hasCompletedOnboarding, default: d.hasCompletedOnboarding)
+        showHubOnLaunch = c.value(.showHubOnLaunch, default: d.showHubOnLaunch)
     }
 }
 
@@ -44,7 +70,7 @@ public enum ProTierPlan: String, Codable, CaseIterable {
     case monthly = "Monthly"
     case annual = "Annual"
     case lifetime = "Lifetime"
-    
+
     public var priceString: String {
         switch self {
         case .monthly: return "$1.99 / month"
@@ -52,7 +78,7 @@ public enum ProTierPlan: String, Codable, CaseIterable {
         case .lifetime: return "$24.99 one-time"
         }
     }
-    
+
     public var savingsBadge: String? {
         switch self {
         case .monthly: return nil
@@ -67,9 +93,9 @@ public struct LicenseStatus: Codable, Equatable {
     public var activePlan: ProTierPlan?
     public var expirationDate: Date?
     public var isMockProActive: Bool
-    
+
     public init(
-        isPro: Bool = true, // By default enable Pro so the user gets all features right away, with ability to toggle in Settings
+        isPro: Bool = true, // All features enabled by default; toggle available in Settings.
         activePlan: ProTierPlan? = .lifetime,
         expirationDate: Date? = nil,
         isMockProActive: Bool = true
@@ -78,5 +104,15 @@ public struct LicenseStatus: Codable, Equatable {
         self.activePlan = activePlan
         self.expirationDate = expirationDate
         self.isMockProActive = isMockProActive
+    }
+
+    enum CodingKeys: String, CodingKey { case isPro, activePlan, expirationDate, isMockProActive }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        isPro = c.value(.isPro, default: true)
+        activePlan = c.optionalValue(.activePlan)
+        expirationDate = c.optionalValue(.expirationDate)
+        isMockProActive = c.value(.isMockProActive, default: isPro)
     }
 }

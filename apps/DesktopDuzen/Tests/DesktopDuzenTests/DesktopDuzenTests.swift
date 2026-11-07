@@ -1,187 +1,579 @@
 import XCTest
+import AppKit
 @testable import DesktopDuzen
 
-final class DesktopDuzenTests: XCTestCase {
-    
+/// Every test runs against a throw-away Desktop, Application Support folder and Trash.
+/// Earlier tests created AppState instances that wrote starter folders into the real
+/// ~/Desktop/Zones on every run ("Active Projects 1…8"); that cannot happen here.
+class SandboxedTestCase: XCTestCase {
+    var root: URL!
+    var desktop: URL!
+    var storage: URL!
+    var trash: URL!
+    var fs: FileManagerService!
+
+    override func setUpWithError() throws {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("DDTests-\(UUID().uuidString)", isDirectory: true)
+        desktop = root.appendingPathComponent("Desktop", isDirectory: true)
+        storage = root.appendingPathComponent("Support", isDirectory: true)
+        trash = root.appendingPathComponent("Trash", isDirectory: true)
+        for dir in [desktop!, storage!, trash!] {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        fs = FileManagerService(desktopURL: desktop)
+        let trashDir = trash!
+        fs.trashHandler = { url in
+            let dest = trashDir.appendingPathComponent("\(UUID().uuidString)-\(url.lastPathComponent)")
+            try FileManager.default.moveItem(at: url, to: dest)
+        }
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    func makeState(createStarter: Bool = true) -> AppState {
+        AppState(customStorageURL: storage, fileService: fs, createStarterContent: createStarter)
+    }
+
+    @discardableResult
+    func write(_ name: String, in dir: URL, contents: String = "x", age: TimeInterval = 60) throws -> URL {
+        let url = dir.appendingPathComponent(name)
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+        let date = Date().addingTimeInterval(-age)
+        try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
+        return url
+    }
+
+    func names(in dir: URL) -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).filter { !$0.hasPrefix(".") }.sorted()
+    }
+}
+
+// MARK: - Persistence
+
+final class PersistenceTests: SandboxedTestCase {
+    func testStarterDataIsIdempotentAndNeverDuplicatesFolders() throws {
+        _ = makeState()
+        // Simulate a lost/reset state file and several relaunches.
+        for _ in 0..<5 {
+            try FileManager.default.removeItem(at: storage.appendingPathComponent("state.json"))
+            _ = makeState()
+        }
+        XCTAssertEqual(names(in: fs.zonesBaseURL), ["Active Projects", "Downloads & Media"])
+        XCTAssertEqual(names(in: fs.zonesBaseURL.appendingPathComponent("Active Projects")), ["Welcome to DesktopDüzen.txt"])
+    }
+
+    func testExistingStateIsLoadedWithoutCreatingFolders() throws {
+        let first = makeState()
+        first.zones[0].title = "Renamed In Memory"
+        XCTAssertTrue(first.saveState())
+        let before = names(in: fs.zonesBaseURL)
+        let second = makeState()
+        XCTAssertEqual(second.zones.first?.title, "Renamed In Memory")
+        XCTAssertEqual(names(in: fs.zonesBaseURL), before)
+    }
+
+    func testLegacyStateFileFromVersion1Decodes() throws {
+        // Shape of the state.json written by build 371 (no version key, no custom colours, old Finder path).
+        let legacy = """
+        {"stickers":[],"license":{"activePlan":"Lifetime","isMockProActive":true,"isPro":true},
+         "widgets":[{"title":"Desktop Clock","id":"23403662-1920-411F-9F39-EC6862779FF5","type":"Clock & Date","isDigitalClock":true,"noteColorHex":"#FFE066","frame":[[60,970],[220,110]],"noteContent":"n"}],
+         "autoSortRules":[{"name":"Images & Screenshots","targetZoneTitle":"Media & Images","id":"580147F3-2FE2-4FF8-BC91-F37EAB81F40B","extensions":["png","JPG",".jpeg"],"isEnabled":true}],
+         "settings":{"snapThreshold":14,"showZonesOnAllSpaces":true,"globalHotkeyEnabled":true,"gridSize":15,"snapToNeighbors":true,"autoSortEnabled":false,"launchAtLogin":false,"hideLooseDesktopIcons":false,"hasCompletedOnboarding":true,"alignmentMode":true,"snapToGrid":true},
+         "zones":[
+          {"viewMode":"Icon","isPinnedOnTop":false,"autoExpandOnHover":false,"collapsedHeight":42,"expandedHeight":260,"fontSize":11.5,"isCollapsed":false,"apps":[],"displayID":0,"type":"File Zone","tabs":[],"backingFolderPath":"/tmp/x","iconSpacing":12,"iconSize":52,"title":"Active Projects","sortMode":"Manual (Drag to Sort)","createdAt":815716880.448509,"id":"CF747EB0-A075-43A1-A2C0-24AD5B6C2F06","manualOrder":[],"themeID":"glass_blur","frame":[[60,1090],[340,260]]},
+          {"viewMode":"Icon","type":"App Zone","apps":[{"name":"Finder","bundleID":"","path":"/System/Applications/Finder.app","id":"35D28460-F06C-411C-83B7-9FB06810CABE","order":0}],"title":"Quick Launcher","id":"7DA40913-8C1B-4ABA-86E5-6122E2A5B330","themeID":"light_frost","frame":[[390,825],[340,260]]},
+          {"title":"Broken zone without id"},
+          {"viewMode":"NotARealMode","title":"Bad enum","id":"E94DA6F1-C733-4403-AA37-713E9167C41F","frame":"garbage"}
+         ]}
+        """
+        try legacy.write(to: storage.appendingPathComponent("state.json"), atomically: true, encoding: .utf8)
+        let state = makeState()
+        XCTAssertNil(state.recoveredCorruptStateFile)
+        XCTAssertEqual(state.zones.map(\.title), ["Active Projects", "Quick Launcher", "Bad enum"])
+        XCTAssertEqual(state.zones[2].viewMode, .icon, "invalid enum falls back to default")
+        XCTAssertEqual(state.zones[2].frame.width, 340, "invalid frame falls back to default")
+        XCTAssertEqual(state.zones[1].apps.first?.path, "/System/Library/CoreServices/Finder.app", "legacy Finder path migrated")
+        XCTAssertEqual(state.settings.gridSize, 15)
+        XCTAssertTrue(state.settings.showHubOnLaunch, "new setting gets its default")
+        XCTAssertEqual(state.autoSortRules.first?.extensions, ["png", "jpg", "jpeg"], "extensions normalised")
+        XCTAssertEqual(state.widgets.count, 1)
+        XCTAssertTrue(names(in: desktop).isEmpty, "loading must not create folders")
+    }
+
+    func testCorruptStateIsPreservedNotOverwritten() throws {
+        let garbage = "{ this is not json"
+        try garbage.write(to: storage.appendingPathComponent("state.json"), atomically: true, encoding: .utf8)
+        let state = makeState(createStarter: false)
+        let backup = try XCTUnwrap(state.recoveredCorruptStateFile)
+        XCTAssertEqual(try String(contentsOf: backup, encoding: .utf8), garbage)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storage.appendingPathComponent("state.json").path))
+    }
+
+    func testDuplicateZoneIDsAreDroppedOnLoad() throws {
+        let state = makeState(createStarter: false)
+        let zone = ZoneModel(title: "Twice")
+        state.zones = [zone, zone]
+        state.saveState()
+        XCTAssertEqual(makeState(createStarter: false).zones.count, 1)
+    }
+
+    func testExportImportRoundTripAndRejectsForeignJSON() throws {
+        let a = makeState(createStarter: false)
+        a.zones = [ZoneModel(title: "Alpha", customBackgroundHex: "#FFFFFF", customBackgroundOpacity: 0.8)]
+        let json = try XCTUnwrap(a.exportConfigurationJSON())
+
+        try FileManager.default.removeItem(at: storage.appendingPathComponent("state.json"))
+        let b = makeState(createStarter: false)
+        XCTAssertTrue(b.importConfigurationJSON(json))
+        XCTAssertEqual(b.zones.map(\.title), ["Alpha"])
+        XCTAssertEqual(b.zones.first?.customBackgroundHex, "#FFFFFF")
+        XCTAssertFalse(b.importConfigurationJSON("{\"hello\": 1}"))
+        XCTAssertFalse(b.importConfigurationJSON("not json"))
+        XCTAssertEqual(b.zones.map(\.title), ["Alpha"], "failed import leaves layout untouched")
+    }
+
+    func testZoneSanitizeRepairsUnusableFrames() {
+        var z = ZoneModel(title: "Bad", frame: CGRect(x: CGFloat.nan, y: 0, width: 10, height: 5), isCollapsed: false, expandedHeight: 20)
+        z.sanitize()
+        XCTAssertTrue(z.frame.origin.x.isFinite)
+        XCTAssertGreaterThanOrEqual(z.frame.width, 200)
+        XCTAssertGreaterThanOrEqual(z.frame.height, 120)
+    }
+
+    func testFrameUpdateAndCollapsedHeightPersist() throws {
+        let state = makeState(createStarter: false)
+        let zone = try XCTUnwrap(state.createDefaultFileZone(title: "Work"))
+        state.updateZoneFrame(id: zone.id, frame: CGRect(x: 111.4, y: 222.6, width: 400, height: 300))
+        state.saveState()
+        let reloaded = makeState(createStarter: false)
+        let z = try XCTUnwrap(reloaded.zone(id: zone.id))
+        XCTAssertEqual(z.frame, CGRect(x: 111.4, y: 222.6, width: 400, height: 300).integral)
+        XCTAssertEqual(z.expandedHeight, z.frame.height)
+    }
+}
+
+// MARK: - File safety
+
+final class FileSafetyTests: SandboxedTestCase {
+    func testMoveKeepsBothOnCollision() throws {
+        let dest = desktop.appendingPathComponent("Dest", isDirectory: true)
+        try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
+        let src = try write("document.txt", in: desktop, contents: "new")
+        try write("document.txt", in: dest, contents: "old")
+        let moved = try fs.transfer(src, toDirectory: dest, mode: .move).get()
+        XCTAssertEqual(moved.lastPathComponent, "document 1.txt")
+        XCTAssertEqual(try String(contentsOf: dest.appendingPathComponent("document.txt"), encoding: .utf8), "old")
+        XCTAssertEqual(try String(contentsOf: moved, encoding: .utf8), "new")
+    }
+
+    func testCopyModeLeavesSource() throws {
+        let dest = desktop.appendingPathComponent("Dest", isDirectory: true)
+        try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
+        let src = try write("a.txt", in: desktop)
+        _ = try fs.transfer(src, toDirectory: dest, mode: .copy).get()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: src.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dest.appendingPathComponent("a.txt").path))
+    }
+
+    func testCannotMoveFolderIntoItself() throws {
+        let folder = desktop.appendingPathComponent("F", isDirectory: true)
+        let inner = folder.appendingPathComponent("Inner", isDirectory: true)
+        try FileManager.default.createDirectory(at: inner, withIntermediateDirectories: true)
+        guard case .failure(.intoItself) = fs.transfer(folder, toDirectory: inner, mode: .move) else {
+            return XCTFail("expected intoItself")
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: inner.path))
+    }
+
+    func testMissingDestinationFailsWithoutLosingSource() throws {
+        let src = try write("keep.txt", in: desktop)
+        let result = fs.transfer(src, toDirectory: desktop.appendingPathComponent("Nope"), mode: .move)
+        guard case .failure(.destinationMissing) = result else { return XCTFail("expected destinationMissing") }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: src.path))
+    }
+
+    func testDuplicateCopiesInsteadOfRenaming() throws {
+        let src = try write("report.pdf", in: desktop, contents: "pdf")
+        let copy = try fs.duplicateFile(at: src).get()
+        let copy2 = try fs.duplicateFile(at: src).get()
+        XCTAssertEqual(copy.lastPathComponent, "report copy.pdf")
+        XCTAssertEqual(copy2.lastPathComponent, "report copy 2.pdf")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: src.path), "original must remain")
+    }
+
+    func testRenameRejectsClashesAndInvalidNames() throws {
+        let a = try write("a.txt", in: desktop)
+        try write("b.txt", in: desktop)
+        guard case .failure(.nameExists) = fs.renameFile(at: a, to: "b.txt") else { return XCTFail() }
+        guard case .failure(.invalidName) = fs.renameFile(at: a, to: "x/y") else { return XCTFail() }
+        guard case .failure(.invalidName) = fs.renameFile(at: a, to: "   ") else { return XCTFail() }
+        XCTAssertEqual(try fs.renameFile(at: a, to: "c.txt").get().lastPathComponent, "c.txt")
+    }
+
+    func testDeleteZoneMovesFilesBackAndTrashesOnlyEmptyFolder() throws {
+        let state = makeState(createStarter: false)
+        let zone = try XCTUnwrap(state.createDefaultFileZone(title: "Temp"))
+        let folder = URL(fileURLWithPath: zone.backingFolderPath)
+        try write("one.txt", in: folder)
+        try write("clash.txt", in: folder, contents: "zone")
+        try write("clash.txt", in: desktop, contents: "desktop")
+
+        let result = state.deleteZone(id: zone.id, action: .moveFilesToDesktop)
+        XCTAssertEqual(result.movedCount, 2)
+        XCTAssertTrue(result.failedNames.isEmpty)
+        XCTAssertTrue(result.folderRemoved)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+        XCTAssertEqual(try String(contentsOf: desktop.appendingPathComponent("clash.txt"), encoding: .utf8), "desktop")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: desktop.appendingPathComponent("clash 1.txt").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: desktop.appendingPathComponent("one.txt").path))
+        XCTAssertFalse(state.zones.contains { $0.id == zone.id })
+    }
+
+    func testDeleteZoneUnbindAndTrashAreRecoverable() throws {
+        let state = makeState(createStarter: false)
+        let keep = try XCTUnwrap(state.createDefaultFileZone(title: "Keep"))
+        try write("k.txt", in: URL(fileURLWithPath: keep.backingFolderPath))
+        state.deleteZone(id: keep.id, action: .unbindOnly)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: keep.backingFolderPath + "/k.txt"))
+
+        let trashed = try XCTUnwrap(state.createDefaultFileZone(title: "Bin"))
+        try write("t.txt", in: URL(fileURLWithPath: trashed.backingFolderPath))
+        state.deleteZone(id: trashed.id, action: .moveToTrash)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: trashed.backingFolderPath))
+        XCTAssertEqual(names(in: trash).count, 1, "folder went to (test) Trash, not deleted")
+    }
+
+    func testDeletingFolderZoneNeverTouchesTheFolder() throws {
+        let state = makeState(createStarter: false)
+        let external = root.appendingPathComponent("Projects", isDirectory: true)
+        try FileManager.default.createDirectory(at: external, withIntermediateDirectories: true)
+        try write("important.txt", in: external)
+        let zone = state.createFolderZone(title: "Projects", folderURL: external)
+        state.deleteZone(id: zone.id, action: .moveToTrash)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: external.appendingPathComponent("important.txt").path))
+    }
+
+    func testRenameZoneRenamesFolderAndHandlesClash() throws {
+        let state = makeState(createStarter: false)
+        let a = try XCTUnwrap(state.createDefaultFileZone(title: "A"))
+        _ = try XCTUnwrap(state.createDefaultFileZone(title: "B"))
+        state.renameZone(id: a.id, newTitle: "B")
+        XCTAssertEqual(URL(fileURLWithPath: try XCTUnwrap(state.zone(id: a.id)).backingFolderPath).lastPathComponent, "B 1")
+        state.renameZone(id: a.id, newTitle: "b 1")
+        XCTAssertEqual(URL(fileURLWithPath: try XCTUnwrap(state.zone(id: a.id)).backingFolderPath).lastPathComponent, "b 1", "case-only rename")
+    }
+
+    func testFolderNameSanitization() {
+        XCTAssertEqual(fs.sanitizeFolderName("Test / Zone: 1?"), "Test - Zone- 1-")
+        XCTAssertEqual(fs.sanitizeFolderName("   "), "Zone")
+        XCTAssertEqual(fs.sanitizeFolderName("..hidden"), "hidden")
+    }
+}
+
+// MARK: - Auto-sort
+
+final class AutoSortTests: SandboxedTestCase {
+    func testPlanSkipsFoldersPartialAndFreshFilesAndReportsMissingZones() throws {
+        let state = makeState(createStarter: false)
+        let media = try XCTUnwrap(state.createDefaultFileZone(title: "Media & Images"))
+        try write("photo.PNG", in: desktop)
+        try write("paper.pdf", in: desktop)
+        try write("movie.mp4.crdownload", in: desktop)
+        try write("just-saved.jpg", in: desktop, age: 0)
+        try FileManager.default.createDirectory(at: desktop.appendingPathComponent("Folder.png"), withIntermediateDirectories: true)
+
+        let service = AutoSortService(fileService: fs)
+        let plan = service.makePlan(rules: AutoSortRule.defaultRules, zones: state.zones)
+        XCTAssertEqual(plan.moves.map { $0.source.lastPathComponent }, ["photo.PNG"])
+        XCTAssertEqual(plan.moves.first?.zoneID, media.id)
+        XCTAssertEqual(plan.missingTargets, ["Documents"])
+        XCTAssertEqual(plan.filesWaitingForMissingZones, 1)
+
+        let result = service.execute(plan)
+        XCTAssertEqual(result.moved, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: media.backingFolderPath + "/photo.PNG"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: desktop.appendingPathComponent("paper.pdf").path), "no zone, no move")
+    }
+
+    func testTargetByIDSurvivesZoneRenameAndNeverOverwrites() throws {
+        let state = makeState(createStarter: false)
+        let zone = try XCTUnwrap(state.createDefaultFileZone(title: "Docs"))
+        try write("a.pdf", in: URL(fileURLWithPath: zone.backingFolderPath), contents: "existing")
+        try write("a.pdf", in: desktop, contents: "incoming")
+        state.renameZone(id: zone.id, newTitle: "Papers")
+        let rule = AutoSortRule(name: "PDF", targetZoneTitle: "Docs", targetZoneID: zone.id, extensions: ["pdf"])
+        let service = AutoSortService(fileService: fs)
+        let result = service.execute(service.makePlan(rules: [rule], zones: state.zones))
+        XCTAssertEqual(result.moved, 1)
+        let folder = URL(fileURLWithPath: try XCTUnwrap(state.zone(id: zone.id)).backingFolderPath)
+        XCTAssertEqual(names(in: folder), ["a 1.pdf", "a.pdf"])
+        XCTAssertEqual(try String(contentsOf: folder.appendingPathComponent("a.pdf"), encoding: .utf8), "existing")
+    }
+
+    func testNeverSortsIntoTheDesktopItself() throws {
+        let state = makeState(createStarter: false)
+        let zone = state.createFolderZone(title: "Desk", folderURL: desktop)
+        try write("x.png", in: desktop)
+        let rule = AutoSortRule(name: "img", targetZoneTitle: "Desk", targetZoneID: zone.id, extensions: ["png"])
+        XCTAssertTrue(AutoSortService(fileService: fs).makePlan(rules: [rule], zones: state.zones).isEmpty)
+    }
+
+    func testDisabledRulesAndAppZonesAreIgnored() throws {
+        let state = makeState(createStarter: false)
+        state.createAppZone(title: "Media & Images", initialApps: [AppItem(name: "X", path: "/Applications/X.app")])
+        try write("x.png", in: desktop)
+        var rules = AutoSortRule.defaultRules
+        let service = AutoSortService(fileService: fs)
+        XCTAssertTrue(service.makePlan(rules: rules, zones: state.zones).isEmpty, "app zones are not file targets")
+        _ = try XCTUnwrap(state.createDefaultFileZone(title: "Media & Images"))
+        rules[0].isEnabled = false
+        XCTAssertTrue(service.makePlan(rules: rules, zones: state.zones).isEmpty)
+    }
+
+    func testExtensionParsing() {
+        XCTAssertEqual(AutoSortRule.parseExtensions(" .PNG, jpg;;gif  png"), ["png", "jpg", "gif"])
+    }
+}
+
+// MARK: - Contrast
+
+final class ContrastTests: XCTestCase {
+    func testEveryThemeMeetsWCAGAAForAllTextRoles() {
+        for theme in ThemePresets.allThemes {
+            let p = ZonePalette.make(theme: theme)
+            XCTAssertGreaterThanOrEqual(p.primaryContrast, 4.5, "\(theme.name) primary")
+            XCTAssertGreaterThanOrEqual(p.secondaryContrast, 4.5, "\(theme.name) secondary")
+            XCTAssertGreaterThanOrEqual(p.titleContrast, 4.5, "\(theme.name) title")
+        }
+    }
+
+    func testLightThemeUsesDarkTextAndDarkThemeUsesLightText() {
+        XCTAssertFalse(ZonePalette.make(theme: ThemePresets.lightFrost).isDark)
+        XCTAssertLessThan(ZonePalette.make(theme: ThemePresets.lightFrost).primaryRGB.relativeLuminance, 0.1)
+        XCTAssertTrue(ZonePalette.make(theme: ThemePresets.darkFrost).isDark)
+        XCTAssertEqual(ZonePalette.make(theme: ThemePresets.darkFrost).primaryRGB, .white)
+        XCTAssertEqual(ZonePalette.make(theme: ThemePresets.lightFrost).colorScheme, .light)
+    }
+
+    func testArbitraryCustomBackgroundsStayReadable() {
+        var generator = SystemRandomNumberGenerator()
+        let pureColours = ["#FFFFFF", "#000000", "#808080", "#777777", "#FFFF00", "#00FFFF", "#FF0000", "#0000FF", "#00FF00", "#FF00FF"]
+        var samples = pureColours.map { ($0, 0.35) } + pureColours.map { ($0, 1.0) }
+        for _ in 0..<500 {
+            let hex = String(format: "#%02X%02X%02X", Int.random(in: 0...255, using: &generator),
+                             Int.random(in: 0...255, using: &generator), Int.random(in: 0...255, using: &generator))
+            samples.append((hex, Double.random(in: 0.35...1.0, using: &generator)))
+        }
+        for (hex, opacity) in samples {
+            let p = ZonePalette.make(theme: ThemePresets.minimalWireframe, customHex: hex, customOpacity: opacity)
+            XCTAssertGreaterThanOrEqual(p.primaryContrast, 4.5, "\(hex) @ \(opacity)")
+            XCTAssertGreaterThanOrEqual(p.secondaryContrast, 4.5, "\(hex) @ \(opacity) secondary")
+            XCTAssertGreaterThanOrEqual(p.titleContrast, 4.5, "\(hex) @ \(opacity) title")
+        }
+    }
+
+    func testHexParsing() {
+        XCTAssertEqual(RGBAColor(hex: "#FFF"), .white)
+        XCTAssertEqual(RGBAColor(hex: "000000"), .black)
+        XCTAssertEqual(RGBAColor(hex: "#FFFFFF33").a, 0.2, accuracy: 0.001)
+        XCTAssertEqual(RGBAColor(hex: "zz"), .black)
+        XCTAssertEqual(RGBAColor(hex: "#12AB9F").hexString, "#12AB9F")
+    }
+
     func testThemePresets() {
         XCTAssertGreaterThanOrEqual(ThemePresets.allThemes.count, 11)
-        
-        let glass = ThemePresets.theme(for: "glass_blur")
-        XCTAssertEqual(glass.name, "Liquid Glass")
-        XCTAssertFalse(glass.isPro)
-        
-        let cyberpunk = ThemePresets.theme(for: "cyberpunk_neon")
-        XCTAssertEqual(cyberpunk.name, "Cyberpunk")
-        XCTAssertTrue(cyberpunk.isPro)
-        
-        let unknown = ThemePresets.theme(for: "non_existent_id")
-        XCTAssertEqual(unknown.id, ThemePresets.glassBlur.id)
+        XCTAssertEqual(ThemePresets.theme(for: "non_existent").id, ThemePresets.glassBlur.id)
+        XCTAssertEqual(Set(ThemePresets.allThemes.map(\.id)).count, ThemePresets.allThemes.count, "theme ids unique")
     }
-    
-    func testFolderNameSanitization() {
-        let fms = FileManagerService.shared
-        XCTAssertEqual(fms.sanitizeFolderName("Test / Zone: 1?"), "Test - Zone- 1-")
-        XCTAssertEqual(fms.sanitizeFolderName("   "), "Zone")
-        XCTAssertEqual(fms.sanitizeFolderName("My Documents"), "My Documents")
+}
+
+// MARK: - Snapping and sorting
+
+final class LayoutTests: XCTestCase {
+    func testSnapToNeighbourEdges() {
+        var settings = AppSettings()
+        settings.snapToGrid = false
+        let other = NSRect(x: 400, y: 100, width: 300, height: 200)
+        let snapped = Snapping.snap(NSRect(x: 405, y: 105, width: 300, height: 200), otherFrames: [other], settings: settings)
+        XCTAssertEqual(snapped.origin, CGPoint(x: 400, y: 100))
     }
-    
-    func testFileItemFormatting() {
-        let url = URL(fileURLWithPath: "/tmp/sample.pdf")
-        let item = FileItem(
-            name: "sample.pdf",
-            url: url,
-            isDirectory: false,
-            size: 1048576, // 1 MB
-            modificationDate: Date(),
-            kindDescription: "PDF Document"
-        )
-        
-        XCTAssertEqual(item.name, "sample.pdf")
-        XCTAssertFalse(item.isDirectory)
-        XCTAssertTrue(item.formattedSize.contains("MB") || item.formattedSize.contains("1"))
+
+    func testGridSnapAndDisabledAlignment() {
+        var settings = AppSettings(gridSize: 20)
+        settings.snapToNeighbors = false
+        XCTAssertEqual(Snapping.snap(NSRect(x: 47, y: 31, width: 10, height: 10), otherFrames: [], settings: settings).origin, CGPoint(x: 40, y: 40))
+        settings.alignmentMode = false
+        XCTAssertEqual(Snapping.snap(NSRect(x: 47, y: 31, width: 10, height: 10), otherFrames: [], settings: settings).origin, CGPoint(x: 47, y: 31))
     }
-    
+
+    func testSortingIsStableAndManualOrderRespected() {
+        let base = Date()
+        let files = [
+            FileItem(name: "b.txt", url: URL(fileURLWithPath: "/t/b.txt"), size: 2, modificationDate: base, manualOrder: 1),
+            FileItem(name: "a10.txt", url: URL(fileURLWithPath: "/t/a10.txt"), size: 2, modificationDate: base, manualOrder: Int.max),
+            FileItem(name: "a2.txt", url: URL(fileURLWithPath: "/t/a2.txt"), size: 1, modificationDate: base.addingTimeInterval(-5), manualOrder: 0)
+        ]
+        XCTAssertEqual(ZoneSorting.sorted(files, mode: .manual).map(\.name), ["a2.txt", "b.txt", "a10.txt"])
+        XCTAssertEqual(ZoneSorting.sorted(files, mode: .nameAsc).map(\.name), ["a2.txt", "a10.txt", "b.txt"], "Finder-style numeric sort")
+        XCTAssertEqual(ZoneSorting.sorted(files, mode: .sizeDesc).map(\.name), ["a10.txt", "b.txt", "a2.txt"])
+    }
+
     func testZoneModelTabsAndPaths() {
-        let baseDir = "/Users/darwin/Desktop/Zones/Work"
-        var zone = ZoneModel(
-            type: .file,
-            title: "Work",
-            backingFolderPath: baseDir
-        )
-        
-        XCTAssertEqual(zone.resolvedFolderPath, baseDir)
-        
-        let tab1 = ZoneTab(title: "Active", subfolderName: "Active", order: 0)
-        let tab2 = ZoneTab(title: "Archive", subfolderName: "Archive", order: 1)
-        zone.tabs = [tab1, tab2]
-        zone.activeTabID = tab1.id
-        
-        XCTAssertEqual(zone.resolvedFolderPath, "\(baseDir)/Active")
-        
-        zone.activeTabID = tab2.id
-        XCTAssertEqual(zone.resolvedFolderPath, "\(baseDir)/Archive")
+        var zone = ZoneModel(type: .file, title: "Work", backingFolderPath: "/z/Work")
+        XCTAssertEqual(zone.resolvedFolderPath, "/z/Work")
+        let t1 = ZoneTab(title: "Active"), t2 = ZoneTab(title: "Archive")
+        zone.tabs = [t1, t2]
+        zone.activeTabID = t2.id
+        XCTAssertEqual(zone.resolvedFolderPath, "/z/Work/Archive")
+        zone.tabs = [t1]
+        zone.sanitize()
+        XCTAssertEqual(zone.activeTabID, t1.id, "dangling active tab repaired")
     }
-    
-    func testProEntitlements() {
-        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let appState = AppState(customStorageURL: tempDir)
-        defer { try? FileManager.default.removeItem(at: tempDir) }
-        
-        // When Pro is disabled
-        appState.license.isPro = false
-        appState.license.isMockProActive = false
-        
-        appState.zones = [
-            ZoneModel(title: "Zone 1"),
-            ZoneModel(title: "Zone 2"),
-            ZoneModel(title: "Zone 3")
-        ]
-        
-        XCTAssertFalse(appState.canAddZone(), "Free tier must limit to 3 zones")
-        XCTAssertFalse(appState.canUseTabs(), "Free tier cannot use multi-tabs")
-        XCTAssertFalse(appState.canAutoExpand(), "Free tier cannot use auto-expand")
-        XCTAssertFalse(appState.canPinOnTop(), "Free tier cannot pin on top")
-        
-        let proTheme = ThemePresets.cyberpunkNeon
-        XCTAssertFalse(appState.canUseTheme(proTheme), "Pro theme locked on Free tier")
-        
-        // When Pro is enabled
-        appState.license.isPro = true
-        XCTAssertTrue(appState.canAddZone(), "Pro tier allows unlimited zones")
-        XCTAssertTrue(appState.canUseTabs(), "Pro tier allows multi-tabs")
-        XCTAssertTrue(appState.canAutoExpand(), "Pro tier allows auto-expand")
-        XCTAssertTrue(appState.canPinOnTop(), "Pro tier allows pin on top")
-        XCTAssertTrue(appState.canUseTheme(proTheme), "Pro theme unlocked on Pro tier")
+
+    func testProEntitlements() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let fs = FileManagerService(desktopURL: dir.appendingPathComponent("Desktop"))
+        let state = AppState(customStorageURL: dir, fileService: fs, createStarterContent: false)
+        state.license = LicenseStatus(isPro: false, activePlan: nil, isMockProActive: false)
+        state.zones = [ZoneModel(title: "1"), ZoneModel(title: "2"), ZoneModel(title: "3")]
+        XCTAssertFalse(state.canAddZone())
+        XCTAssertFalse(state.canUseTheme(ThemePresets.cyberpunkNeon))
+        state.license.isPro = true
+        XCTAssertTrue(state.canAddZone())
+        XCTAssertTrue(state.canPinOnTop())
     }
-    
-    func testExportAndImportJSON() {
-        let tempDir1 = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let tempDir2 = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer {
-            try? FileManager.default.removeItem(at: tempDir1)
-            try? FileManager.default.removeItem(at: tempDir2)
+}
+
+// MARK: - Live folder updates
+
+final class LiveUpdateTests: SandboxedTestCase {
+    func testFolderMonitorReportsChanges() throws {
+        let monitor = FolderMonitor(url: desktop)
+        let changed = expectation(description: "change")
+        changed.assertForOverFulfill = false
+        monitor.onChange = { changed.fulfill() }
+        XCTAssertTrue(monitor.start())
+        try write("new.txt", in: desktop)
+        wait(for: [changed], timeout: 3)
+        monitor.stop()
+    }
+
+    func testFolderMonitorStartFailsGracefullyForMissingFolder() {
+        XCTAssertFalse(FolderMonitor(url: desktop.appendingPathComponent("missing")).start())
+    }
+
+    func testZoneFileStoreTracksAddRenameDeleteAndMissingFolder() throws {
+        let folder = desktop.appendingPathComponent("Zone", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let store = ZoneFileStore(fileService: fs)
+        store.watch(path: folder.path, manualOrder: [])
+
+        func waitUntil(_ timeout: TimeInterval = 6, _ condition: @escaping () -> Bool) {
+            let deadline = Date().addingTimeInterval(timeout)
+            while !condition() && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
         }
-        
-        let appState = AppState(customStorageURL: tempDir1)
-        appState.zones = [
-            ZoneModel(title: "Test Zone Alpha", frame: CGRect(x: 50, y: 50, width: 300, height: 200)),
-            ZoneModel(title: "Test Zone Beta", frame: CGRect(x: 400, y: 50, width: 300, height: 200))
-        ]
-        
-        guard let exportedJSON = appState.exportConfigurationJSON() else {
-            XCTFail("Failed to export JSON")
-            return
+
+        let file = try write("a.txt", in: folder)
+        waitUntil { store.files.map(\.name) == ["a.txt"] }
+        XCTAssertEqual(store.files.map(\.name), ["a.txt"])
+
+        try FileManager.default.moveItem(at: file, to: folder.appendingPathComponent("b.txt"))
+        waitUntil { store.files.map(\.name) == ["b.txt"] }
+        XCTAssertEqual(store.files.map(\.name), ["b.txt"])
+
+        try FileManager.default.removeItem(at: folder)
+        waitUntil { store.folderMissing }
+        XCTAssertTrue(store.folderMissing, "deleted/ejected folder detected")
+
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try write("c.txt", in: folder)
+        waitUntil(8) { !store.folderMissing && store.files.map(\.name) == ["c.txt"] }
+        XCTAssertFalse(store.folderMissing, "reconnects when the folder returns")
+        XCTAssertEqual(store.files.map(\.name), ["c.txt"])
+        store.stop()
+    }
+
+    func testManyFilesListQuickly() throws {
+        let folder = desktop.appendingPathComponent("Big", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for i in 0..<2000 { FileManager.default.createFile(atPath: folder.appendingPathComponent("f\(i).txt").path, contents: Data()) }
+        let start = Date()
+        let items = fs.contentsOfFolder(path: folder.path)
+        XCTAssertEqual(items.count, 2000)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2.0)
+    }
+
+    func testRepeatedZoneCreateDeleteIsStable() throws {
+        let state = makeState(createStarter: false)
+        for i in 0..<150 {
+            let z = try XCTUnwrap(state.createDefaultFileZone(title: "Z\(i % 5)"))
+            state.deleteZone(id: z.id, action: .moveFilesToDesktop)
         }
-        
-        XCTAssertTrue(exportedJSON.contains("Test Zone Alpha"))
-        XCTAssertTrue(exportedJSON.contains("Test Zone Beta"))
-        
-        let newAppState = AppState(customStorageURL: tempDir2)
-        let success = newAppState.importConfigurationJSON(exportedJSON)
-        XCTAssertTrue(success)
-        XCTAssertEqual(newAppState.zones.count, 2)
-        XCTAssertEqual(newAppState.zones[0].title, "Test Zone Alpha")
+        XCTAssertTrue(state.zones.allSatisfy { $0.type == .app }, "only the starter app zone remains")
+        XCTAssertEqual(names(in: fs.zonesBaseURL), [], "empty zone folders cleaned up via (test) Trash")
     }
-    
-    func testFileMoveCollisionHandling() {
-        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: tempDir) }
-        
-        let sourceFile = tempDir.appendingPathComponent("document.txt")
-        try? "Hello World".write(to: sourceFile, atomically: true, encoding: .utf8)
-        
-        let targetSubDir = tempDir.appendingPathComponent("TargetSubDir")
-        try? FileManager.default.createDirectory(at: targetSubDir, withIntermediateDirectories: true)
-        
-        // Existing file with same name in target
-        let existingFile = targetSubDir.appendingPathComponent("document.txt")
-        try? "Pre-existing content".write(to: existingFile, atomically: true, encoding: .utf8)
-        
-        // Move with .keepBoth
-        let movedURL = FileManagerService.shared.moveFile(from: sourceFile, toDirectory: targetSubDir, collisionOption: .keepBoth)
-        XCTAssertNotNil(movedURL)
-        XCTAssertEqual(movedURL?.lastPathComponent, "document 1.txt")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: existingFile.path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: movedURL!.path))
+}
+
+final class DragSmoothnessTests: XCTestCase {
+    /// Regression: live drag positions must follow the pointer 1:1 (no grid stepping),
+    /// so moving 1 px at a time never jumps by a grid cell.
+    func testLiveDragDoesNotGridStep() {
+        let settings = AppSettings(gridSize: 15)
+        var previous = Snapping.snap(NSRect(x: 100, y: 100, width: 300, height: 200), otherFrames: [], settings: settings, includeGrid: false)
+        for step in 1...40 {
+            let r = Snapping.snap(NSRect(x: 100 + CGFloat(step), y: 100, width: 300, height: 200), otherFrames: [], settings: settings, includeGrid: false)
+            XCTAssertEqual(r.origin.x - previous.origin.x, 1, accuracy: 0.001)
+            previous = r
+        }
+        let settled = Snapping.snap(NSRect(x: 107, y: 100, width: 300, height: 200), otherFrames: [], settings: settings, includeGrid: true)
+        XCTAssertEqual(settled.origin.x, 105, "grid applied on release")
     }
-    
-    func testAutoSortRuleMatching() {
-        let rules = AutoSortRule.defaultRules
-        let imageRule = rules.first(where: { $0.name == "Images & Screenshots" })
-        XCTAssertNotNil(imageRule)
-        XCTAssertTrue(imageRule!.extensions.contains("png"))
-        XCTAssertTrue(imageRule!.extensions.contains("jpg"))
-        XCTAssertFalse(imageRule!.extensions.contains("pdf"))
-        
-        let docRule = rules.first(where: { $0.name == "Documents & PDFs" })
-        XCTAssertNotNil(docRule)
-        XCTAssertTrue(docRule!.extensions.contains("pdf"))
-        XCTAssertTrue(docRule!.extensions.contains("docx"))
+}
+
+final class ThemeLibraryTests: XCTestCase {
+    func testLibraryHasLiquidGlassAndValidCategories() {
+        XCTAssertGreaterThanOrEqual(ThemePresets.allThemes.count, 27)
+        XCTAssertGreaterThanOrEqual(ThemePresets.allThemes.filter { $0.category == "Liquid Glass" }.count, 7)
+        for theme in ThemePresets.allThemes {
+            XCTAssertTrue(ThemePresets.categoryOrder.contains(theme.category), "\(theme.name) category shown in picker")
+        }
     }
-    
-    func testAlignmentSnapping() {
-        let panel = ZonePanel(
-            zone: ZoneModel(title: "Snapping Test"),
-            contentRect: NSRect(x: 100, y: 100, width: 300, height: 200)
-        )
-        
-        let otherZoneRect = NSRect(x: 400, y: 100, width: 300, height: 200)
-        
-        // Test near-edge snap
-        let origSettings = AppState.shared.settings
-        defer { AppState.shared.settings = origSettings }
-        
-        AppState.shared.settings.alignmentMode = true
-        AppState.shared.settings.snapToNeighbors = true
-        AppState.shared.settings.snapToGrid = false
-        AppState.shared.settings.snapThreshold = 14.0
-        
-        // Dragging to x: 405 (within 14px of 400)
-        let candidate = NSRect(x: 405, y: 105, width: 300, height: 200)
-        let snapped = panel.snapFrame(candidate, otherFrames: [otherZoneRect])
-        
-        XCTAssertEqual(snapped.origin.x, 400, "Should snap to matching left edge")
-        XCTAssertEqual(snapped.origin.y, 100, "Should snap to matching bottom edge")
+
+    func testGradientAndSheenAreCheckedOnEveryStop() {
+        for theme in ThemePresets.allThemes where theme.gradientHexes.count >= 2 || theme.sheen > 0 {
+            let p = ZonePalette.make(theme: theme)
+            let expected = theme.tintStops.count + (theme.sheen > 0 ? 1 : 0)
+            XCTAssertEqual(p.backgrounds.count, expected, theme.name)
+            XCTAssertGreaterThanOrEqual(p.primaryContrast, 4.5, "\(theme.name) worst stop")
+            XCTAssertGreaterThanOrEqual(p.accentContrast, 3.0, "\(theme.name) accent")
+        }
+    }
+
+    func testLiquidClearUsesDarkTextOnLightGlass() {
+        let p = ZonePalette.make(theme: ThemePresets.liquidClear)
+        XCTAssertEqual(p.primaryRGB, .black)
+        XCTAssertTrue(p.glassHighlight)
+    }
+
+    func testCustomColourDisablesSheenAndGradient() {
+        let p = ZonePalette.make(theme: ThemePresets.liquidAqua, customHex: "#FFFFFF", customOpacity: 0.5)
+        XCTAssertEqual(p.stops.count, 1)
+        XCTAssertEqual(p.sheen, 0)
+        XCTAssertFalse(p.glassHighlight)
+    }
+}
+
+final class ThemeSafetyNetTests: XCTestCase {
+    /// A deliberately hostile theme (mid-tone gradient + strong sheen) must still end up legible.
+    func testUnreadableGradientIsCorrectedAutomatically() {
+        let hostile = ZoneTheme(id: "x", name: "Hostile", backgroundHex: "#777777", backgroundOpacity: 0.3,
+                                gradientHexes: ["#3A8FD0", "#777777", "#B04070"], sheen: 0.35, glassHighlight: true)
+        let p = ZonePalette.make(theme: hostile)
+        XCTAssertGreaterThanOrEqual(p.primaryContrast, 4.5)
+        XCTAssertGreaterThanOrEqual(p.secondaryContrast, 4.5)
+        XCTAssertGreaterThanOrEqual(p.titleContrast, 4.5)
     }
 }

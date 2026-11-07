@@ -3,159 +3,139 @@ import AppKit
 
 public struct GlobalSearchView: View {
     @EnvironmentObject var appState: AppState
-    @State private var query: String = ""
-    @State private var searchResults: [SearchResultItem] = []
-    @State private var selectedItemID: String? = nil
-    
+    @State private var query = ""
+    @State private var results: [SearchResultItem] = []
+    @State private var selectedID: String?
+    @FocusState private var fieldFocused: Bool
+
     struct SearchResultItem: Identifiable {
         var id: String { file.path }
         var file: FileItem
         var zoneTitle: String
     }
-    
+
     public var body: some View {
         VStack(spacing: 0) {
-            // Search Input Field
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 16))
                     .foregroundColor(.secondary)
-                
-                TextField("Search files across all zones...", text: $query)
-                    .textFieldStyle(PlainTextFieldStyle())
+                TextField("Search files in all zones", text: $query)
+                    .textFieldStyle(.plain)
                     .font(.system(size: 15))
-                    .onChange(of: query) { newQuery in
-                        performSearch(query: newQuery)
-                    }
-                
+                    .foregroundColor(.primary)
+                    .focused($fieldFocused)
+                    .onSubmit(openSelected)
+                    .onChange(of: query) { performSearch($0) }
                 if !query.isEmpty {
-                    Button(action: {
-                        query = ""
-                        searchResults = []
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
+                    Button { query = "" } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
                     }
-                    .buttonStyle(PlainButtonStyle())
+                    .buttonStyle(.plain)
+                    .help("Clear")
                 }
             }
             .padding(14)
-            .background(Color.white.opacity(0.08))
-            
+
             Divider()
-            
-            // Results List
-            if searchResults.isEmpty {
+
+            if results.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "doc.text.magnifyingglass")
-                        .font(.system(size: 32))
-                        .foregroundColor(.white.opacity(0.2))
-                    Text(query.isEmpty ? "Type to search files in any zone" : "No files found matching '\(query)'")
-                        .font(.system(size: 12))
+                        .font(.system(size: 30))
+                        .foregroundColor(.secondary)
+                    Text(query.isEmpty ? "Type to search file names in every zone" : "No files match “\(query)”")
+                        .font(.callout)
                         .foregroundColor(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView(.vertical, showsIndicators: true) {
                     LazyVStack(spacing: 2) {
-                        ForEach(searchResults) { item in
-                            let isSelected = (selectedItemID == item.id)
-                            HStack(spacing: 10) {
-                                FileThumbnailView(file: item.file, size: CGSize(width: 24, height: 24))
-                                    .frame(width: 24, height: 24)
-                                
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(item.file.name)
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundColor(isSelected ? .white : .white.opacity(0.9))
-                                    
-                                    HStack(spacing: 6) {
-                                        Text(item.zoneTitle)
-                                            .font(.system(size: 10, weight: .semibold))
-                                            .foregroundColor(.cyan)
-                                        Text("•")
-                                            .font(.system(size: 9))
-                                            .foregroundColor(.secondary)
-                                        Text(item.file.formattedSize)
-                                            .font(.system(size: 10))
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                                
-                                Spacer()
-                                
-                                Button(action: {
-                                    NSWorkspace.shared.selectFile(item.file.path, inFileViewerRootedAtPath: item.file.url.deletingLastPathComponent().path)
-                                }) {
-                                    Image(systemName: "arrow.up.forward.app")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.secondary)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                                .help("Reveal in Finder")
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(isSelected ? Color.blue.opacity(0.35) : Color.clear)
-                            .cornerRadius(6)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                selectedItemID = item.id
-                            }
-                            .simultaneousGesture(
-                                TapGesture(count: 2).onEnded {
-                                    NSWorkspace.shared.open(item.file.url)
-                                }
-                            )
+                        ForEach(results) { item in
+                            resultRow(item)
                         }
                     }
                     .padding(8)
                 }
             }
-            
+
             Divider()
-            
-            // Footer with Keyboard shortcuts hint
+
             HStack {
-                Text("Double-click to open • Space to preview • Esc to close")
-                    .font(.system(size: 10))
+                Text("Return opens the selected file • Esc closes")
+                    .font(.caption)
                     .foregroundColor(.secondary)
                 Spacer()
-                Button("Done") {
-                    NSApp.keyWindow?.orderOut(nil)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                Button("Done") { WindowManager.shared.closeSearch() }
+                    .controlSize(.small)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color.white.opacity(0.04))
         }
         .frame(width: 560, height: 380)
         .background(VisualEffectBlur(material: .popover))
-        .cornerRadius(14)
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1))
+        .onAppear { fieldFocused = true }
     }
-    
-    private func performSearch(query: String) {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    private func resultRow(_ item: SearchResultItem) -> some View {
+        let isSelected = selectedID == item.id
+        return HStack(spacing: 10) {
+            FileThumbnailView(file: item.file, size: CGSize(width: 24, height: 24))
+                .frame(width: 24, height: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.file.name)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(isSelected ? Color(nsColor: .alternateSelectedControlTextColor) : .primary)
+                    .lineLimit(1)
+                Text("\(item.zoneTitle) • \(item.file.formattedSize)")
+                    .font(.caption)
+                    .foregroundColor(isSelected ? Color(nsColor: .alternateSelectedControlTextColor).opacity(0.85) : .secondary)
+            }
+            Spacer()
+            Button {
+                NSWorkspace.shared.activateFileViewerSelecting([item.file.url])
+            } label: {
+                Image(systemName: "arrow.up.forward.app")
+                    .foregroundColor(isSelected ? Color(nsColor: .alternateSelectedControlTextColor) : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Reveal in Finder")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 6).fill(isSelected ? Color(nsColor: .selectedContentBackgroundColor) : Color.clear))
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { NSWorkspace.shared.open(item.file.url) }
+        .onTapGesture { selectedID = item.id }
+    }
+
+    private func openSelected() {
+        if let item = results.first(where: { $0.id == selectedID }) ?? results.first {
+            NSWorkspace.shared.open(item.file.url)
+            WindowManager.shared.closeSearch()
+        }
+    }
+
+    private func performSearch(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            searchResults = []
+            results = []
+            selectedID = nil
             return
         }
-        
-        var results: [SearchResultItem] = []
+        var found: [SearchResultItem] = []
+        var seen = Set<String>()
         for zone in appState.zones where zone.type != .app {
-            let files = FileManagerService.shared.contentsOfFolder(path: zone.resolvedFolderPath)
-            for file in files {
-                if file.name.localizedCaseInsensitiveContains(trimmed) {
-                    results.append(SearchResultItem(file: file, zoneTitle: zone.title))
-                }
+            for file in appState.fileService.contentsOfFolder(path: zone.resolvedFolderPath)
+            where file.name.localizedCaseInsensitiveContains(trimmed) && seen.insert(file.path).inserted {
+                found.append(SearchResultItem(file: file, zoneTitle: zone.title))
             }
+            if found.count >= 300 { break }
         }
-        self.searchResults = results
+        results = found
+        if !found.contains(where: { $0.id == selectedID }) { selectedID = found.first?.id }
     }
 }

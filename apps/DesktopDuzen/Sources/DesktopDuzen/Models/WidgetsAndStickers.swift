@@ -10,12 +10,12 @@ public enum StickerType: String, Codable, CaseIterable {
 public struct DesktopSticker: Identifiable, Codable, Equatable {
     public var id: UUID
     public var type: StickerType
-    public var content: String // e.g. "🚀", "star.fill", "TODO!"
+    public var content: String
     public var frame: CGRect
     public var rotationDegrees: Double
     public var scale: Double
     public var tintHex: String
-    
+
     public init(
         id: UUID = UUID(),
         type: StickerType = .emoji,
@@ -33,6 +33,19 @@ public struct DesktopSticker: Identifiable, Codable, Equatable {
         self.scale = scale
         self.tintHex = tintHex
     }
+
+    enum CodingKeys: String, CodingKey { case id, type, content, frame, rotationDegrees, scale, tintHex }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        type = c.value(.type, default: .emoji)
+        content = c.value(.content, default: "⭐️")
+        frame = c.value(.frame, default: CGRect(x: 200, y: 200, width: 80, height: 80))
+        rotationDegrees = c.value(.rotationDegrees, default: 0)
+        scale = min(max(c.value(.scale, default: 1.0), 0.3), 4)
+        tintHex = c.value(.tintHex, default: "#FFCC00")
+    }
 }
 
 public enum WidgetType: String, Codable, CaseIterable, Identifiable {
@@ -40,15 +53,24 @@ public enum WidgetType: String, Codable, CaseIterable, Identifiable {
     case calendar = "Mini Calendar"
     case quickNote = "Sticky Note"
     case systemGlance = "System Monitor"
-    
+
     public var id: String { rawValue }
-    
+
     public var iconName: String {
         switch self {
         case .clock: return "clock.fill"
         case .calendar: return "calendar"
         case .quickNote: return "note.text"
         case .systemGlance: return "gauge.medium"
+        }
+    }
+
+    public var defaultSize: CGSize {
+        switch self {
+        case .clock: return CGSize(width: 220, height: 120)
+        case .calendar: return CGSize(width: 240, height: 230)
+        case .quickNote: return CGSize(width: 230, height: 190)
+        case .systemGlance: return CGSize(width: 230, height: 150)
         }
     }
 }
@@ -61,13 +83,13 @@ public struct DesktopWidget: Identifiable, Codable, Equatable {
     public var noteContent: String
     public var noteColorHex: String
     public var isDigitalClock: Bool
-    
+
     public init(
         id: UUID = UUID(),
         type: WidgetType = .clock,
         title: String = "Widget",
         frame: CGRect = CGRect(x: 300, y: 300, width: 220, height: 160),
-        noteContent: String = "Don't forget to push updates!",
+        noteContent: String = "",
         noteColorHex: String = "#FFE066",
         isDigitalClock: Bool = true
     ) {
@@ -78,5 +100,21 @@ public struct DesktopWidget: Identifiable, Codable, Equatable {
         self.noteContent = noteContent
         self.noteColorHex = noteColorHex
         self.isDigitalClock = isDigitalClock
+    }
+
+    enum CodingKeys: String, CodingKey { case id, type, title, frame, noteContent, noteColorHex, isDigitalClock }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        type = c.value(.type, default: .clock)
+        title = c.value(.title, default: "Widget")
+        var f = c.value(.frame, default: CGRect(x: 300, y: 300, width: 220, height: 160))
+        if f.width < 140 { f.size.width = 140 }
+        if f.height < 90 { f.size.height = 90 }
+        frame = f
+        noteContent = c.value(.noteContent, default: "")
+        noteColorHex = c.value(.noteColorHex, default: "#FFE066")
+        isDigitalClock = c.value(.isDigitalClock, default: true)
     }
 }

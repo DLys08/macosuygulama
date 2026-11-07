@@ -5,6 +5,7 @@ public struct ZoneModel: Identifiable, Codable, Equatable {
     public var id: UUID
     public var type: ZoneType
     public var title: String
+    /// Frame in global AppKit screen coordinates (origin bottom-left of the primary display).
     public var frame: CGRect
     public var displayID: UInt32
     public var isCollapsed: Bool
@@ -20,12 +21,16 @@ public struct ZoneModel: Identifiable, Codable, Equatable {
     public var backingFolderPath: String
     public var securityBookmarkData: Data?
     public var themeID: String
+    /// Optional user-chosen tint that overrides the theme background.
+    public var customBackgroundHex: String?
+    /// Optional user-chosen tint opacity (0.35...1.0).
+    public var customBackgroundOpacity: Double?
     public var iconSize: Double
     public var fontSize: Double
     public var iconSpacing: Double
     public var manualOrder: [String]
     public var createdAt: Date
-    
+
     public init(
         id: UUID = UUID(),
         type: ZoneType = .file,
@@ -45,6 +50,8 @@ public struct ZoneModel: Identifiable, Codable, Equatable {
         backingFolderPath: String = "",
         securityBookmarkData: Data? = nil,
         themeID: String = "glass_blur",
+        customBackgroundHex: String? = nil,
+        customBackgroundOpacity: Double? = nil,
         iconSize: Double = 52.0,
         fontSize: Double = 11.5,
         iconSpacing: Double = 12.0,
@@ -69,18 +76,76 @@ public struct ZoneModel: Identifiable, Codable, Equatable {
         self.backingFolderPath = backingFolderPath
         self.securityBookmarkData = securityBookmarkData
         self.themeID = themeID
+        self.customBackgroundHex = customBackgroundHex
+        self.customBackgroundOpacity = customBackgroundOpacity
         self.iconSize = iconSize
         self.fontSize = fontSize
         self.iconSpacing = iconSpacing
         self.manualOrder = manualOrder
         self.createdAt = createdAt
     }
-    
+
+    enum CodingKeys: String, CodingKey {
+        case id, type, title, frame, displayID, isCollapsed, collapsedHeight, expandedHeight
+        case autoExpandOnHover, isPinnedOnTop, viewMode, sortMode, tabs, activeTabID, apps
+        case backingFolderPath, securityBookmarkData, themeID, customBackgroundHex
+        case customBackgroundOpacity, iconSize, fontSize, iconSpacing, manualOrder, createdAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // The id is the only field without which a zone cannot be tracked.
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.title = c.value(.title, default: "Zone")
+        self.type = c.value(.type, default: .file)
+        self.frame = c.value(.frame, default: CGRect(x: 100, y: 100, width: 340, height: 260))
+        self.displayID = c.value(.displayID, default: 0)
+        self.isCollapsed = c.value(.isCollapsed, default: false)
+        self.collapsedHeight = c.value(.collapsedHeight, default: 42.0)
+        self.expandedHeight = c.value(.expandedHeight, default: 260.0)
+        self.autoExpandOnHover = c.value(.autoExpandOnHover, default: false)
+        self.isPinnedOnTop = c.value(.isPinnedOnTop, default: false)
+        self.viewMode = c.value(.viewMode, default: .icon)
+        self.sortMode = c.value(.sortMode, default: .manual)
+        self.tabs = c.lossyArray(.tabs)
+        self.activeTabID = c.optionalValue(.activeTabID)
+        self.apps = c.lossyArray(.apps)
+        self.backingFolderPath = c.value(.backingFolderPath, default: "")
+        self.securityBookmarkData = c.optionalValue(.securityBookmarkData)
+        self.themeID = c.value(.themeID, default: "glass_blur")
+        self.customBackgroundHex = c.optionalValue(.customBackgroundHex)
+        self.customBackgroundOpacity = c.optionalValue(.customBackgroundOpacity)
+        self.iconSize = c.value(.iconSize, default: 52.0)
+        self.fontSize = c.value(.fontSize, default: 11.5)
+        self.iconSpacing = c.value(.iconSpacing, default: 12.0)
+        self.manualOrder = c.value(.manualOrder, default: [])
+        self.createdAt = c.value(.createdAt, default: Date())
+        sanitize()
+    }
+
+    /// Repairs values that would produce an unusable window.
+    public mutating func sanitize() {
+        if !frame.origin.x.isFinite || !frame.origin.y.isFinite { frame.origin = CGPoint(x: 100, y: 100) }
+        if !frame.width.isFinite || frame.width < 200 { frame.size.width = frame.width.isFinite ? max(200, frame.width) : 340 }
+        if !frame.height.isFinite || frame.height < 30 { frame.size.height = 260 }
+        if collapsedHeight < 30 || collapsedHeight > 80 { collapsedHeight = 42 }
+        if !expandedHeight.isFinite || expandedHeight < 120 { expandedHeight = 260 }
+        if isCollapsed {
+            frame.size.height = collapsedHeight
+        } else if frame.height < 120 {
+            frame.size.height = expandedHeight
+        }
+        iconSize = min(max(iconSize, 24), 96)
+        fontSize = min(max(fontSize, 9), 18)
+        iconSpacing = min(max(iconSpacing, 4), 32)
+        if let opacity = customBackgroundOpacity { customBackgroundOpacity = min(max(opacity, 0.35), 1.0) }
+        if let active = activeTabID, !tabs.contains(where: { $0.id == active }) { activeTabID = tabs.first?.id }
+    }
+
     public var resolvedFolderPath: String {
         if type == .app { return "" }
         if !tabs.isEmpty, let activeID = activeTabID, let tab = tabs.first(where: { $0.id == activeID }) {
-            let subfolder = (backingFolderPath as NSString).appendingPathComponent(tab.subfolderName)
-            return subfolder
+            return (backingFolderPath as NSString).appendingPathComponent(tab.subfolderName)
         }
         return backingFolderPath
     }

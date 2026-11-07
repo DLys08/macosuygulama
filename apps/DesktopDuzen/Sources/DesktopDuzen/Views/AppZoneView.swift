@@ -2,62 +2,69 @@ import SwiftUI
 import AppKit
 
 public struct AppZoneView: View {
-    @ObservedObject var appState: AppState
+    @EnvironmentObject var appState: AppState
+    @Environment(\.zonePalette) private var palette
     let zone: ZoneModel
-    
+
     private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: 64, maximum: 80), spacing: 12)]
+        [GridItem(.adaptive(minimum: 68, maximum: 84), spacing: 10)]
     }
-    
+
     public var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
-            LazyVGrid(columns: columns, spacing: 12) {
+            LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(zone.apps) { app in
-                    AppTileView(app: app) {
-                        launchApp(app)
-                    } onRemove: {
-                        removeApp(app)
-                    }
+                    AppTileView(app: app, onLaunch: { launch(app) }, onRemove: { remove(app) })
                 }
-                
-                // Add App Button
                 Button(action: pickNewApp) {
                     VStack(spacing: 6) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.white.opacity(0.08))
+                                .fill(palette.controlFill)
                                 .frame(width: 48, height: 48)
-                            
                             Image(systemName: "plus")
                                 .font(.system(size: 20, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.8))
+                                .foregroundColor(palette.primary)
                         }
-                        
                         Text("Add App")
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.white.opacity(0.7))
+                            .foregroundColor(palette.secondary)
                             .lineLimit(1)
                     }
                     .padding(6)
                 }
-                .buttonStyle(PlainButtonStyle())
+                .buttonStyle(.plain)
+                .help("Add applications to this zone")
             }
             .padding(12)
         }
     }
-    
-    private func launchApp(_ app: AppItem) {
+
+    private func launch(_ app: AppItem) {
         let url = URL(fileURLWithPath: app.path)
-        NSWorkspace.shared.open(url)
+        if FileManager.default.fileExists(atPath: url.path) {
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                if let error = error {
+                    DispatchQueue.main.async { ZoneActions.info("Could Not Open \(app.name)", error.localizedDescription, style: .warning) }
+                }
+            }
+        } else if !app.bundleID.isEmpty, let found = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleID) {
+            // The app moved; follow it and remember the new location.
+            NSWorkspace.shared.openApplication(at: found, configuration: NSWorkspace.OpenConfiguration())
+            appState.mutateZone(id: zone.id) { z in
+                if let idx = z.apps.firstIndex(where: { $0.id == app.id }) { z.apps[idx].path = found.path }
+            }
+        } else {
+            ZoneActions.info("Application Not Found", "\(app.name) is no longer at \(app.path).", style: .warning)
+        }
     }
-    
-    private func removeApp(_ app: AppItem) {
-        var updated = zone
-        updated.apps.removeAll(where: { $0.id == app.id })
-        appState.updateZone(updated)
+
+    private func remove(_ app: AppItem) {
+        appState.mutateZone(id: zone.id) { $0.apps.removeAll { $0.id == app.id } }
     }
-    
+
     private func pickNewApp() {
+        NSApp.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -65,70 +72,52 @@ public struct AppZoneView: View {
         panel.allowedContentTypes = [.application]
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
         panel.prompt = "Add to Zone"
-        panel.message = "Select applications to add to '\(zone.title)':"
-        
-        if panel.runModal() == .OK {
-            var updated = zone
-            for url in panel.urls {
-                if let item = FileManagerService.shared.resolveAppInfo(at: url.path) {
-                    if !updated.apps.contains(where: { $0.path == item.path }) {
-                        updated.apps.append(item)
-                    }
-                }
+        panel.message = "Choose applications to add to “\(zone.title)”."
+        guard panel.runModal() == .OK else { return }
+        let items = panel.urls.compactMap { appState.fileService.resolveAppInfo(at: $0.path) }
+        appState.mutateZone(id: zone.id) { z in
+            for item in items where !z.apps.contains(where: { $0.path == item.path }) {
+                var app = item
+                app.order = z.apps.count
+                z.apps.append(app)
             }
-            appState.updateZone(updated)
         }
     }
 }
 
 public struct AppTileView: View {
+    @Environment(\.zonePalette) private var palette
     let app: AppItem
     let onLaunch: () -> Void
     let onRemove: () -> Void
-    
-    @State private var isHovering: Bool = false
-    
+    @State private var isHovering = false
+
     public var body: some View {
         Button(action: onLaunch) {
             VStack(spacing: 6) {
-                // App Icon
                 Image(nsImage: ThumbnailService.shared.appIcon(for: app.path))
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 48, height: 48)
-                    .scaleEffect(isHovering ? 1.08 : 1.0)
-                    .shadow(color: isHovering ? Color.white.opacity(0.3) : Color.black.opacity(0.4), radius: isHovering ? 6 : 2)
-                    .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovering)
-                
-                // App Name
                 Text(app.name)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(0.9))
+                    .foregroundColor(palette.primary)
                     .lineLimit(1)
-                    .frame(maxWidth: 68)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 72)
             }
             .padding(6)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isHovering ? Color.white.opacity(0.12) : Color.clear)
-            )
+            .background(RoundedRectangle(cornerRadius: 10).fill(isHovering ? palette.controlFillStrong : Color.clear))
             .contentShape(Rectangle())
         }
-        .buttonStyle(PlainButtonStyle())
-        .onHover { hovering in
-            self.isHovering = hovering
-        }
+        .buttonStyle(.plain)
+        .help(app.name)
+        .onHover { isHovering = $0 }
         .contextMenu {
-            Button("Launch \(app.name)") {
-                onLaunch()
-            }
-            Button("Reveal in Finder") {
-                NSWorkspace.shared.selectFile(app.path, inFileViewerRootedAtPath: "/Applications")
-            }
+            Button("Open \(app.name)", action: onLaunch)
+            Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: app.path)]) }
             Divider()
-            Button(role: .destructive, action: onRemove) {
-                Label("Remove Shortcut", systemImage: "trash")
-            }
+            Button("Remove Shortcut", action: onRemove)
         }
     }
 }

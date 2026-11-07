@@ -36,7 +36,7 @@ public struct PaywallView: View {
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 12)
-            .background(Color.white.opacity(0.04))
+            .background(Color.primary.opacity(0.04))
             .cornerRadius(12)
             
             // Plan Cards
@@ -69,11 +69,11 @@ public struct PaywallView: View {
                     .padding(12)
                     .background(
                         RoundedRectangle(cornerRadius: 10)
-                            .fill(isSelected ? Color.blue.opacity(0.18) : Color.white.opacity(0.04))
+                            .fill(isSelected ? Color.blue.opacity(0.18) : Color.primary.opacity(0.04))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(isSelected ? Color.blue : Color.white.opacity(0.1), lineWidth: isSelected ? 2 : 1)
+                            .stroke(isSelected ? Color.blue : Color.primary.opacity(0.1), lineWidth: isSelected ? 2 : 1)
                     )
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -115,7 +115,7 @@ public struct PaywallView: View {
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.cyan)
+                    .foregroundColor(.accentColor)
                 }
             }
             .padding(.horizontal, 24)
@@ -135,7 +135,7 @@ public struct PaywallView: View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.cyan)
+                .foregroundColor(.accentColor)
                 .frame(width: 20)
             
             VStack(alignment: .leading, spacing: 1) {

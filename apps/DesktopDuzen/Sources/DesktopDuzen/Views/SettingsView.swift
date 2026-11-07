@@ -4,417 +4,382 @@ import AppKit
 public struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @State private var selectedTab: SettingsTab = .general
-    @State private var exportedJSON: String = ""
-    @State private var isExportAlertPresented: Bool = false
-    @State private var isImportPresented: Bool = false
-    @State private var importJSONText: String = ""
-    @State private var importErrorAlert: Bool = false
-    
+    @State private var exportedJSON = ""
+    @State private var isExportPresented = false
+    @State private var isImportPresented = false
+    @State private var importJSONText = ""
+    @State private var importError = false
+    @State private var loginItemMessage: String?
+    @State private var loginItemEnabled = LaunchAtLoginService.shared.isEnabled
+
     enum SettingsTab: String, CaseIterable, Identifiable {
         case general = "General"
         case zones = "Zones"
         case autoSort = "Auto-Sort"
         case proLicense = "Pro & License"
         case about = "About"
-        
+
         var id: String { rawValue }
-        
         var iconName: String {
             switch self {
             case .general: return "gearshape"
             case .zones: return "square.grid.2x2"
-            case .autoSort: return "tray.full.fill"
-            case .proLicense: return "crown.fill"
+            case .autoSort: return "tray.full"
+            case .proLicense: return "crown"
             case .about: return "info.circle"
             }
         }
     }
-    
+
     public var body: some View {
         VStack(spacing: 0) {
-            // Tab Selector
-            HStack(spacing: 8) {
+            Picker("", selection: $selectedTab) {
                 ForEach(SettingsTab.allCases) { tab in
-                    let isSelected = (selectedTab == tab)
-                    Button(action: { selectedTab = tab }) {
-                        Label(tab.rawValue, systemImage: tab.iconName)
-                            .font(.system(size: 12, weight: isSelected ? .bold : .medium))
-                            .foregroundColor(isSelected ? .white : .secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(isSelected ? Color.blue.opacity(0.3) : Color.clear)
-                            .cornerRadius(8)
-                    }
-                    .buttonStyle(PlainButtonStyle())
+                    Label(tab.rawValue, systemImage: tab.iconName).tag(tab)
                 }
             }
-            .padding(10)
-            .background(Color.white.opacity(0.05))
-            
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(12)
+
             Divider()
-            
-            // Content
+
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 16) {
                     switch selectedTab {
-                    case .general:
-                        generalSettingsTab
-                    case .zones:
-                        zonesSettingsTab
-                    case .autoSort:
-                        autoSortSettingsTab
-                    case .proLicense:
-                        proLicenseSettingsTab
-                    case .about:
-                        aboutSettingsTab
+                    case .general: generalTab
+                    case .zones: zonesTab
+                    case .autoSort: autoSortTab
+                    case .proLicense: proTab
+                    case .about: aboutTab
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)
             }
         }
-        .frame(width: 660, height: 480)
+        .frame(minWidth: 660, minHeight: 460)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
-    
-    // MARK: - General Tab
-    
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text).font(.headline).foregroundColor(.primary)
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+    }
+
+    // MARK: - General
+
     @ViewBuilder
-    private var generalSettingsTab: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("System & Window Behavior")
-                .font(.system(size: 13, weight: .bold))
-            
-            Toggle("Launch DesktopDüzen at Login", isOn: $appState.settings.launchAtLogin)
-            
-            Toggle("Show Zones on All Spaces (Virtual Desktops)", isOn: $appState.settings.showZonesOnAllSpaces)
-            
-            Divider()
-            
-            Text("Alignment & Snapping")
-                .font(.system(size: 13, weight: .bold))
-            
-            Toggle("Enable Alignment & Edge Snapping", isOn: $appState.settings.alignmentMode)
-            
-            Toggle("Snap to Grid", isOn: $appState.settings.snapToGrid)
-                .disabled(!appState.settings.alignmentMode)
-            
-            HStack {
-                Text("Grid Size:")
-                    .frame(width: 120, alignment: .leading)
-                Slider(value: $appState.settings.gridSize, in: 10...40, step: 5)
-                Text("\(Int(appState.settings.gridSize)) px")
-                    .frame(width: 50, alignment: .trailing)
+    private var generalTab: some View {
+        sectionTitle("Startup")
+        Toggle("Launch DesktopDüzen at login", isOn: Binding(
+            get: { loginItemEnabled },
+            set: { value in
+                loginItemMessage = LaunchAtLoginService.shared.setEnabled(value)
+                loginItemEnabled = LaunchAtLoginService.shared.isEnabled
+                appState.settings.launchAtLogin = loginItemEnabled
             }
-            .disabled(!appState.settings.alignmentMode || !appState.settings.snapToGrid)
-            
-            Toggle("Snap to Neighbor Zone Edges", isOn: $appState.settings.snapToNeighbors)
-                .disabled(!appState.settings.alignmentMode)
-            
-            Divider()
-            
-            Text("Desktop Wallpaper Clutter")
-                .font(.system(size: 13, weight: .bold))
-            
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Hide Loose Desktop Icons")
-                        .font(.system(size: 12, weight: .medium))
-                    Text("Hides loose files sitting on wallpaper while keeping all your zones accessible.")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-                Toggle("", isOn: Binding(
-                    get: { appState.settings.hideLooseDesktopIcons },
-                    set: { val in
-                        DesktopIconManager.shared.setDesktopIconsHidden(val)
-                        appState.settings.hideLooseDesktopIcons = val
-                    }
-                ))
+        ))
+        if let message = loginItemMessage {
+            Label { Text(message).font(.caption).foregroundColor(.primary) } icon: {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red)
             }
+        } else if loginItemEnabled {
+            caption("Registered as: \(LaunchAtLoginService.shared.currentMethod.rawValue)")
         }
-    }
-    
-    // MARK: - Zones Tab
-    
-    @ViewBuilder
-    private var zonesSettingsTab: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("Active Zones (\(appState.zones.count))")
-                    .font(.system(size: 13, weight: .bold))
-                Spacer()
-                Button("Auto-Align All Zones") {
-                    appState.autoAlignAllZones()
-                }
-                .buttonStyle(.bordered)
-            }
-            
-            ForEach(appState.zones) { zone in
-                HStack(spacing: 12) {
-                    Image(systemName: zone.type.iconName)
-                        .font(.system(size: 16))
-                        .foregroundColor(.cyan)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(zone.title)
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("\(zone.type.rawValue) • \(zone.viewMode.rawValue) View • \(zone.isPinnedOnTop ? "Pinned on Top" : "Desktop Level")")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    Button("Edit Style") {
-                        if let panel = NSApp.windows.first(where: { ($0 as? ZonePanel)?.zoneID == zone.id }) {
-                            panel.makeKeyAndOrderFront(nil)
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    
-                    Button(role: .destructive, action: {
-                        appState.deleteZone(id: zone.id, action: .moveFilesToDesktop)
-                    }) {
-                        Image(systemName: "trash")
-                            .foregroundColor(.red)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(10)
-                .background(Color.white.opacity(0.04))
-                .cornerRadius(8)
-            }
-            
-            HStack(spacing: 10) {
-                Button("+ New File Zone") {
-                    _ = appState.createDefaultFileZone(title: "New Zone")
-                }
-                .buttonStyle(.borderedProminent)
-                
-                Button("+ New Folder Zone") {
-                    let panel = NSOpenPanel()
-                    panel.canChooseFiles = false
-                    panel.canChooseDirectories = true
-                    if panel.runModal() == .OK, let url = panel.url {
-                        _ = appState.createFolderZone(title: url.lastPathComponent, folderURL: url)
-                    }
-                }
-                .buttonStyle(.bordered)
-                
-                Button("+ New App Zone") {
-                    _ = appState.createAppZone(title: "App Launcher")
-                }
-                .buttonStyle(.bordered)
-            }
-            .padding(.top, 6)
+        Toggle("Show the Hub window when DesktopDüzen starts", isOn: $appState.settings.showHubOnLaunch)
+
+        Divider()
+        sectionTitle("Windows & Spaces")
+        Toggle("Show zones on all Spaces", isOn: $appState.settings.showZonesOnAllSpaces)
+        caption("When off, each zone stays on the Space where it was created. Zones never appear over full-screen apps.")
+
+        Divider()
+        sectionTitle("Alignment & Snapping")
+        Toggle("Snap zones while dragging", isOn: $appState.settings.alignmentMode)
+        Toggle("Snap to grid", isOn: $appState.settings.snapToGrid)
+            .disabled(!appState.settings.alignmentMode)
+        HStack {
+            Text("Grid size")
+                .frame(width: 110, alignment: .leading)
+            Slider(value: $appState.settings.gridSize, in: 10...40, step: 5)
+            Text("\(Int(appState.settings.gridSize)) px")
+                .monospacedDigit()
+                .foregroundColor(.secondary)
+                .frame(width: 50, alignment: .trailing)
         }
+        .disabled(!appState.settings.alignmentMode || !appState.settings.snapToGrid)
+        Toggle("Snap to neighbouring zone edges", isOn: $appState.settings.snapToNeighbors)
+            .disabled(!appState.settings.alignmentMode)
+
+        Divider()
+        sectionTitle("Desktop Icons")
+        Toggle("Hide Finder icons on the Desktop", isOn: Binding(
+            get: { appState.settings.hideLooseDesktopIcons },
+            set: { ZoneActions.setDesktopIconsHidden($0) }
+        ))
+        caption("Only hides the icons Finder draws; no files are moved. Finder restarts briefly when this changes.")
     }
-    
-    // MARK: - Auto-Sort Tab
-    
+
+    // MARK: - Zones
+
     @ViewBuilder
-    private var autoSortSettingsTab: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text("Smart Auto-Sort Rules")
-                            .font(.system(size: 13, weight: .bold))
-                        if !appState.isPro {
-                            Text("PRO")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.orange)
-                                .cornerRadius(4)
-                        }
-                    }
-                    Text("Automatically routes files placed on ~/Desktop into their corresponding zone folder.")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-                Button("Run Sort Now") {
-                    let count = AutoSortService.shared.runAutoSort(
-                        rules: appState.autoSortRules,
-                        zones: appState.zones,
-                        isPro: appState.isPro
-                    )
-                    let alert = NSAlert()
-                    alert.messageText = "Auto-Sort Complete"
-                    alert.informativeText = "Sorted \(count) files."
-                    alert.runModal()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!appState.isPro)
-            }
-            
-            Toggle("Continuously Monitor & Auto-Sort Desktop", isOn: Binding(
-                get: { appState.settings.autoSortEnabled },
-                set: { val in
-                    if !appState.isPro && val {
-                        WindowManager.shared.showPaywall()
-                        return
-                    }
-                    appState.settings.autoSortEnabled = val
-                    if val {
-                        AutoSortService.shared.startMonitoring(rules: appState.autoSortRules, zones: appState.zones, isPro: appState.isPro)
-                    } else {
-                        AutoSortService.shared.stopMonitoring()
-                    }
-                }
-            ))
-            
-            Divider()
-            
-            Text("Configured Rules")
-                .font(.system(size: 12, weight: .semibold))
-            
-            ForEach($appState.autoSortRules) { $rule in
-                HStack(spacing: 10) {
-                    Toggle("", isOn: $rule.isEnabled)
-                        .labelsHidden()
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(rule.name)
-                            .font(.system(size: 12, weight: .medium))
-                        Text("Target Zone: \(rule.targetZoneTitle) • Exts: \(rule.extensions.joined(separator: ", "))")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                }
-                .padding(8)
-                .background(Color.white.opacity(0.04))
-                .cornerRadius(6)
-            }
+    private var zonesTab: some View {
+        HStack {
+            sectionTitle("Zones (\(appState.zones.count))")
+            Spacer()
+            Button("Auto-Align All") { appState.autoAlignAllZones() }
         }
-    }
-    
-    // MARK: - Pro & License Tab
-    
-    @ViewBuilder
-    private var proLicenseSettingsTab: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Pro License Status")
-                        .font(.system(size: 13, weight: .bold))
-                    Text(appState.isPro ? "All Pro features unlocked (\(appState.license.activePlan?.rawValue ?? "Lifetime"))" : "Free Tier Active (Limited to 3 zones)")
-                        .font(.system(size: 12))
-                        .foregroundColor(appState.isPro ? .green : .secondary)
-                }
-                Spacer()
-                Button(appState.isPro ? "View Paywall" : "Upgrade to Pro") {
-                    WindowManager.shared.showPaywall()
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .padding(12)
-            .background(Color.white.opacity(0.05))
-            .cornerRadius(10)
-            
-            Toggle("Testing Switch: Toggle Pro Status", isOn: Binding(
-                get: { appState.license.isPro },
-                set: { val in
-                    appState.license.isPro = val
-                    appState.license.isMockProActive = val
-                }
-            ))
-            
-            Divider()
-            
-            Text("Backup & Configuration (JSON)")
-                .font(.system(size: 13, weight: .bold))
-            
+        ForEach(appState.zones) { zone in
             HStack(spacing: 12) {
-                Button("Export Layout JSON") {
-                    if let json = appState.exportConfigurationJSON() {
-                        exportedJSON = json
-                        isExportAlertPresented = true
-                    }
+                Image(systemName: zone.type.iconName)
+                    .foregroundColor(.accentColor)
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(zone.title).font(.system(size: 12, weight: .semibold)).foregroundColor(.primary)
+                    Text(zone.type == .app ? "\(zone.apps.count) app(s)" : zone.resolvedFolderPath)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                .buttonStyle(.bordered)
-                
-                Button("Import Layout JSON...") {
-                    isImportPresented = true
+                Spacer()
+                Button("Show") { WindowManager.shared.focusZone(id: zone.id) }.controlSize(.small)
+                Button("Rename…") { ZoneActions.renameZone(id: zone.id) }.controlSize(.small)
+                Button { ZoneActions.confirmDelete(id: zone.id) } label: {
+                    Image(systemName: "trash").foregroundColor(.red)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderless)
+                .help("Remove zone…")
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
+        }
+        HStack(spacing: 10) {
+            Button("New File Zone…") { ZoneActions.createFileZone() }.buttonStyle(.borderedProminent)
+            Button("New Folder Zone…") { ZoneActions.createFolderZone() }
+            Button("New App Zone…") { ZoneActions.createAppZone() }
+        }
+        .padding(.top, 4)
+    }
+
+    // MARK: - Auto-Sort
+
+    @ViewBuilder
+    private var autoSortTab: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                sectionTitle("Auto-Sort Rules")
+                caption("Moves loose files from ~/Desktop into a zone's folder by file extension. You see what will move before anything happens. Files are never overwritten.")
+            }
+            Spacer()
+            Button("Run Sort Now…") { ZoneActions.runAutoSortInteractively() }
+                .buttonStyle(.borderedProminent)
+        }
+        Toggle("Sort new Desktop files automatically", isOn: Binding(
+            get: { appState.settings.autoSortEnabled },
+            set: { ZoneActions.setContinuousAutoSort($0) }
+        ))
+        caption("Only moves files into zones that already exist, and waits until a file has finished saving.")
+
+        Divider()
+
+        ForEach($appState.autoSortRules) { $rule in
+            RuleEditorRow(rule: $rule, zones: appState.zones.filter { $0.type != .app }) {
+                appState.autoSortRules.removeAll { $0.id == rule.id }
             }
         }
-        .sheet(isPresented: $isExportAlertPresented) {
-            VStack(spacing: 12) {
-                Text("Exported Zone Configuration")
-                    .font(.headline)
-                TextEditor(text: .constant(exportedJSON))
-                    .font(.system(size: 11, design: .monospaced))
-                    .padding(8)
-                    .background(Color.black.opacity(0.3))
-                    .cornerRadius(8)
-                Button("Close") { isExportAlertPresented = false }
-                    .buttonStyle(.borderedProminent)
+        HStack {
+            Button("Add Rule") {
+                appState.autoSortRules.append(AutoSortRule(name: "New Rule", targetZoneTitle: appState.zones.first(where: { $0.type == .file })?.title ?? "", targetZoneID: appState.zones.first(where: { $0.type == .file })?.id, extensions: []))
             }
-            .padding()
-            .frame(width: 500, height: 350)
-        }
-        .sheet(isPresented: $isImportPresented) {
-            VStack(spacing: 12) {
-                Text("Import Zone Configuration")
-                    .font(.headline)
-                Text("Paste your exported JSON configuration below:")
-                    .font(.caption)
-                TextEditor(text: $importJSONText)
-                    .font(.system(size: 11, design: .monospaced))
-                    .padding(8)
-                    .background(Color.black.opacity(0.3))
-                    .cornerRadius(8)
-                HStack {
-                    Button("Cancel") { isImportPresented = false }
-                    Button("Import") {
-                        if appState.importConfigurationJSON(importJSONText) {
-                            isImportPresented = false
-                        } else {
-                            importErrorAlert = true
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-            }
-            .padding()
-            .frame(width: 500, height: 350)
-            .alert("Invalid JSON format", isPresented: $importErrorAlert) {
-                Button("OK", role: .cancel) {}
-            }
+            Button("Restore Default Rules") { appState.autoSortRules = AutoSortRule.defaultRules }
         }
     }
-    
-    // MARK: - About Tab
-    
+
+    // MARK: - Pro
+
     @ViewBuilder
-    private var aboutSettingsTab: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "square.grid.2x2.fill")
-                .font(.system(size: 48))
-                .foregroundColor(.cyan)
-            
-            Text("DesktopDüzen")
-                .font(.system(size: 18, weight: .bold))
-            
-            Text("Version 1.0.0 (Build 371)")
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
-            
-            Text("Full-featured macOS desktop workspace and zone organizer. Built with Swift, AppKit, and SwiftUI.")
-                .font(.system(size: 12))
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .frame(maxWidth: 420)
-                .padding(.top, 4)
+    private var proTab: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                sectionTitle("License")
+                Text(appState.isPro ? "All features unlocked (\(appState.license.activePlan?.rawValue ?? "Lifetime"))" : "Free tier (up to 3 zones)")
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            Button(appState.isPro ? "Plans…" : "Upgrade…") { WindowManager.shared.showPaywall() }
+                .buttonStyle(.borderedProminent)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.vertical, 30)
+        Toggle("Pro features enabled (testing switch)", isOn: Binding(
+            get: { appState.isPro },
+            set: { value in
+                appState.license.isPro = value
+                appState.license.isMockProActive = value
+                if !value { ZoneActions.setContinuousAutoSort(false) }
+            }
+        ))
+
+        Divider()
+        sectionTitle("Layout Backup")
+        caption("Exports zone positions, themes, rules and settings as JSON. Files inside zones are not included.")
+        HStack(spacing: 12) {
+            Button("Export Layout…") {
+                exportedJSON = appState.exportConfigurationJSON() ?? ""
+                isExportPresented = true
+            }
+            Button("Import Layout…") {
+                importJSONText = ""
+                isImportPresented = true
+            }
+        }
+        .sheet(isPresented: $isExportPresented) { exportSheet }
+        .sheet(isPresented: $isImportPresented) { importSheet }
+    }
+
+    private var exportSheet: some View {
+        VStack(spacing: 12) {
+            Text("Exported Layout").font(.headline)
+            TextEditor(text: .constant(exportedJSON))
+                .font(.system(size: 11, design: .monospaced))
+                .border(Color(nsColor: .separatorColor))
+            HStack {
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(exportedJSON, forType: .string)
+                }
+                Button("Save As…") {
+                    let panel = NSSavePanel()
+                    panel.nameFieldStringValue = "DesktopDuzen-Layout.json"
+                    panel.allowedContentTypes = [.json]
+                    if panel.runModal() == .OK, let url = panel.url {
+                        try? exportedJSON.write(to: url, atomically: true, encoding: .utf8)
+                    }
+                }
+                Spacer()
+                Button("Done") { isExportPresented = false }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .frame(width: 520, height: 380)
+    }
+
+    private var importSheet: some View {
+        VStack(spacing: 12) {
+            Text("Import Layout").font(.headline)
+            Text("Paste exported JSON or open a file. This replaces the current layout; files on disk are not changed.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            TextEditor(text: $importJSONText)
+                .font(.system(size: 11, design: .monospaced))
+                .border(Color(nsColor: .separatorColor))
+            HStack {
+                Button("Open File…") {
+                    let panel = NSOpenPanel()
+                    panel.allowedContentTypes = [.json]
+                    if panel.runModal() == .OK, let url = panel.url, let text = try? String(contentsOf: url, encoding: .utf8) {
+                        importJSONText = text
+                    }
+                }
+                Spacer()
+                Button("Cancel") { isImportPresented = false }.keyboardShortcut(.cancelAction)
+                Button("Import") {
+                    if appState.importConfigurationJSON(importJSONText) {
+                        isImportPresented = false
+                    } else {
+                        importError = true
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .frame(width: 520, height: 380)
+        .alert("This is not a DesktopDüzen layout.", isPresented: $importError) {
+            Button("OK", role: .cancel) {}
+        }
+    }
+
+    // MARK: - About
+
+    @ViewBuilder
+    private var aboutTab: some View {
+        AboutView()
+            .frame(maxWidth: .infinity)
+        HStack {
+            Spacer()
+            Button("Show Layout File in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([appState.stateFileURL])
+            }
+            .controlSize(.small)
+            Spacer()
+        }
+    }
+}
+
+/// One editable auto-sort rule.
+struct RuleEditorRow: View {
+    @Binding var rule: AutoSortRule
+    let zones: [ZoneModel]
+    let onDelete: () -> Void
+    @State private var extensionsText = ""
+
+    private var targetMissing: Bool { AutoSortService.shared.resolveTarget(for: rule, zones: zones) == nil }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Toggle("", isOn: $rule.isEnabled).labelsHidden()
+                TextField("Rule name", text: $rule.name)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 170)
+                Picker("Zone", selection: Binding<String>(
+                    get: { AutoSortService.shared.resolveTarget(for: rule, zones: zones)?.id.uuidString ?? "missing" },
+                    set: { value in
+                        if let zone = zones.first(where: { $0.id.uuidString == value }) {
+                            rule.targetZoneID = zone.id
+                            rule.targetZoneTitle = zone.title
+                        }
+                    }
+                )) {
+                    if targetMissing {
+                        Text("“\(rule.targetZoneTitle)” (no such zone)").tag("missing")
+                    }
+                    ForEach(zones) { zone in Text(zone.title).tag(zone.id.uuidString) }
+                }
+                .frame(maxWidth: 240)
+                Spacer()
+                Button(action: onDelete) { Image(systemName: "minus.circle") }
+                    .buttonStyle(.borderless)
+                    .help("Delete rule")
+            }
+            HStack {
+                Text("Extensions").font(.caption).foregroundColor(.secondary).frame(width: 70, alignment: .leading)
+                TextField("png, jpg, pdf", text: $extensionsText, onCommit: commitExtensions)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11, design: .monospaced))
+                    .onChange(of: extensionsText) { _ in commitExtensions() }
+            }
+            if targetMissing && rule.isEnabled {
+                Label {
+                    Text("No zone named “\(rule.targetZoneTitle)”. Pick a zone, or let Run Sort Now create it.")
+                        .font(.caption)
+                        .foregroundColor(.primary)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                }
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
+        .onAppear { extensionsText = rule.extensions.joined(separator: ", ") }
+    }
+
+    private func commitExtensions() {
+        let parsed = AutoSortRule.parseExtensions(extensionsText)
+        if parsed != rule.extensions { rule.extensions = parsed }
     }
 }

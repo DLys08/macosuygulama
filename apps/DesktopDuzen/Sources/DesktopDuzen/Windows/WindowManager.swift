@@ -3,369 +3,423 @@ import AppKit
 import SwiftUI
 import Combine
 
-public class WindowManager: ObservableObject {
+/// Per-zone runtime objects that must outlive SwiftUI view rebuilds.
+public final class ZoneController: ObservableObject {
+    public let zoneID: UUID
+    public let panel: ZonePanel
+    public let store: ZoneFileStore
+    @Published public var isHoverExpanded = false
+    var appliedPaletteDark: Bool?
+
+    init(zone: ZoneModel, frame: NSRect, fileService: FileManagerService) {
+        self.zoneID = zone.id
+        self.panel = ZonePanel(zone: zone, contentRect: frame)
+        self.store = ZoneFileStore(fileService: fileService)
+    }
+}
+
+public final class WindowManager: ObservableObject {
     public static let shared = WindowManager()
-    
-    private var zonePanels: [UUID: ZonePanel] = [:]
-    private var widgetPanels: [UUID: NSPanel] = [:]
-    private var stickerPanels: [UUID: NSPanel] = [:]
-    
+
+    private var controllers: [UUID: ZoneController] = [:]
+    private var widgetPanels: [UUID: DesktopPanel] = [:]
+    private var stickerPanels: [UUID: DesktopPanel] = [:]
+
     private var settingsWindow: NSWindow?
     private var paywallWindow: NSWindow?
     private var onboardingWindow: NSWindow?
-    private var searchWindow: NSPanel?
+    private var searchWindow: KeyablePanel?
     private var hubWindow: NSWindow?
-    
+    private var aboutWindow: NSWindow?
+
     private var cancellables = Set<AnyCancellable>()
-    
-    public init() {
-        setupScreenChangeObserver()
-    }
-    
+    private var started = false
+    private var state: AppState { AppState.shared }
+
+    public init() {}
+
     public func start() {
+        guard !started else { return }
+        started = true
         observeAppState()
+        observeSystem()
         syncAllZones()
         syncAllWidgets()
         syncAllStickers()
     }
-    
+
+    public func controller(for id: UUID) -> ZoneController? { controllers[id] }
+
+    // MARK: - Observation
+
     private func observeAppState() {
-        AppState.shared.$zones
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.syncAllZones()
-            }
+        state.$zones.receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.syncAllZones() }
             .store(in: &cancellables)
-            
-        AppState.shared.$widgets
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.syncAllWidgets()
-            }
+        state.$widgets.receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.syncAllWidgets() }
             .store(in: &cancellables)
-            
-        AppState.shared.$stickers
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.syncAllStickers()
-            }
+        state.$stickers.receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.syncAllStickers() }
             .store(in: &cancellables)
-            
-        AppState.shared.$areAllZonesHidden
-            .receive(on: RunLoop.main)
-            .sink { [weak self] isHidden in
-                self?.setAllZonesHidden(isHidden)
-            }
+        state.$areAllZonesHidden.removeDuplicates().receive(on: RunLoop.main)
+            .sink { [weak self] hidden in self?.setAllZonesHidden(hidden) }
+            .store(in: &cancellables)
+        state.$settings.map(\.showZonesOnAllSpaces).removeDuplicates().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.refreshAllPanels() }
             .store(in: &cancellables)
     }
-    
-    // MARK: - Screen Handling
-    
-    private func setupScreenChangeObserver() {
-        NotificationCenter.default.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.handleScreenParametersChanged()
+
+    private func observeSystem() {
+        let center = NotificationCenter.default
+        center.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.refreshAllPanels()
+        }
+        let ws = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification,
+                     NSWorkspace.sessionDidBecomeActiveNotification, NSWorkspace.activeSpaceDidChangeNotification] {
+            ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                // Give WindowServer a moment to settle display configuration after wake.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.refreshAllPanels() }
+            }
         }
     }
-    
-    private func handleScreenParametersChanged() {
-        guard let mainScreen = NSScreen.main else { return }
-        let visible = mainScreen.visibleFrame
-        
-        for (id, panel) in zonePanels {
-            let frame = panel.frame
-            // Check if frame is off-screen
-            var onAnyScreen = false
-            for screen in NSScreen.screens {
-                if screen.frame.intersects(frame) {
-                    onAnyScreen = true
-                    break
+
+    /// Re-applies frames, levels and ordering; used after display, Space, sleep and login changes.
+    public func refreshAllPanels() {
+        syncAllZones(forceFrames: true)
+        let allSpaces = state.settings.showZonesOnAllSpaces
+        for panel in Array(widgetPanels.values) + Array(stickerPanels.values) {
+            panel.applySpacesBehavior(allSpaces: allSpaces)
+            panel.setFrame(displayFrame(for: panel.frame), display: true)
+            if !state.areAllZonesHidden { panel.orderFront(nil) }
+        }
+    }
+
+    // MARK: - Display placement
+
+    /// Returns `frame` if enough of it (including the title strip) is on a connected display;
+    /// otherwise a copy moved onto the main display. The stored layout is not modified, so a
+    /// zone returns to its place when the external display comes back.
+    public func displayFrame(for frame: NSRect) -> NSRect {
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { return frame }
+        let titleStrip = NSRect(x: frame.minX + 20, y: frame.maxY - 30, width: max(1, frame.width - 40), height: 30)
+        let titleVisible = screens.contains { $0.visibleFrame.intersects(titleStrip) }
+        let visibleArea = screens.reduce(CGFloat(0)) { sum, screen in
+            let i = screen.frame.intersection(frame)
+            return sum + (i.isNull ? 0 : i.width * i.height)
+        }
+        if titleVisible && visibleArea >= frame.width * frame.height * 0.3 { return frame }
+
+        let target = (NSScreen.main ?? screens[0]).visibleFrame
+        var moved = frame
+        moved.size.width = min(frame.width, target.width - 40)
+        moved.size.height = min(frame.height, target.height - 40)
+        moved.origin.x = min(max(frame.minX, target.minX + 20), target.maxX - moved.width - 20)
+        moved.origin.y = min(max(frame.minY, target.minY + 20), target.maxY - moved.height - 20)
+        return moved
+    }
+
+    // MARK: - Zones
+
+    public func syncAllZones(forceFrames: Bool = false) {
+        let zones = state.zones
+        let ids = Set(zones.map { $0.id })
+
+        for (id, controller) in controllers where !ids.contains(id) {
+            controller.store.stop()
+            controller.panel.orderOut(nil)
+            controller.panel.close()
+            controllers.removeValue(forKey: id)
+        }
+
+        let allSpaces = state.settings.showZonesOnAllSpaces
+        for zone in zones {
+            let controller = controllers[zone.id] ?? createZoneController(for: zone)
+            let panel = controller.panel
+            panel.applyLevel(pinned: zone.isPinnedOnTop)
+            panel.applySpacesBehavior(allSpaces: allSpaces)
+            panel.minimumContentSize = NSSize(width: 220, height: zone.isCollapsed ? zone.collapsedHeight : 120)
+
+            let palette = ZonePalette.forZone(zone)
+            if controller.appliedPaletteDark != palette.isDark {
+                panel.appearance = palette.appearance
+                controller.appliedPaletteDark = palette.isDark
+            }
+
+            if !controller.isHoverExpanded && !panel.inLiveResize {
+                let target = displayFrame(for: zone.frame)
+                if forceFrames || !panel.frame.equalTo(target) {
+                    panel.setFrame(target, display: true)
                 }
             }
-            
-            if !onAnyScreen {
-                var safeRect = frame
-                safeRect.origin.x = visible.minX + 50
-                safeRect.origin.y = visible.minY + 50
-                panel.setFrame(safeRect, display: true, animate: true)
-                
-                if let idx = AppState.shared.zones.firstIndex(where: { $0.id == id }) {
-                    AppState.shared.zones[idx].frame = safeRect
-                }
-            }
-        }
-    }
-    
-    // MARK: - Zones Sync
-    
-    public func syncAllZones() {
-        let currentZones = AppState.shared.zones
-        let currentIDs = Set(currentZones.map { $0.id })
-        
-        // Remove dead panels
-        for (id, panel) in zonePanels where !currentIDs.contains(id) {
-            panel.orderOut(nil)
-            zonePanels.removeValue(forKey: id)
-        }
-        
-        // Add or update panels
-        for zone in currentZones {
-            if let existing = zonePanels[zone.id] {
-                // Update properties
-                existing.updateWindowLevel(isPinnedOnTop: zone.isPinnedOnTop)
+            if zone.type == .app {
+                controller.store.stop()
             } else {
-                createZonePanel(for: zone)
+                controller.store.watch(path: zone.resolvedFolderPath, manualOrder: zone.manualOrder)
             }
+            if !state.areAllZonesHidden && !panel.isVisible { panel.orderFront(nil) }
         }
     }
-    
-    private func createZonePanel(for zone: ZoneModel) {
-        let panel = ZonePanel(zone: zone, contentRect: zone.frame)
-        
-        let contentView = ZoneContentView(zoneID: zone.id)
-            .environmentObject(AppState.shared)
-        
-        let hostingView = NSHostingView(rootView: contentView)
-        panel.contentView = hostingView
-        
-        zonePanels[zone.id] = panel
-        
-        if !AppState.shared.areAllZonesHidden {
-            panel.orderFront(nil)
+
+    @discardableResult
+    private func createZoneController(for zone: ZoneModel) -> ZoneController {
+        let controller = ZoneController(zone: zone, frame: displayFrame(for: zone.frame), fileService: state.fileService)
+        let panel = controller.panel
+        let id = zone.id
+
+        panel.onFrameCommitted = { [weak self] frame in
+            self?.state.updateZoneFrame(id: id, frame: frame)
+        }
+        panel.onHoverChanged = { [weak self, weak controller] inside in
+            guard let self = self, let controller = controller else { return }
+            self.handleHover(inside: inside, controller: controller)
+        }
+
+        let root = ZoneContentView(zoneID: id)
+            .environmentObject(state)
+            .environmentObject(controller)
+            .environmentObject(controller.store)
+        panel.contentView = NSHostingView(rootView: root)
+        panel.installHoverTracking()
+
+        controllers[id] = controller
+        if !state.areAllZonesHidden { panel.orderFront(nil) }
+        return controller
+    }
+
+    private func handleHover(inside: Bool, controller: ZoneController) {
+        guard let zone = state.zone(id: controller.zoneID), zone.isCollapsed,
+              zone.autoExpandOnHover, state.canAutoExpand() else {
+            if !inside && controller.isHoverExpanded { controller.isHoverExpanded = false }
+            return
+        }
+        let panel = controller.panel
+        let top = panel.frame.maxY
+        if inside && !controller.isHoverExpanded {
+            controller.isHoverExpanded = true
+            let height = zone.expandedHeight
+            let target = NSRect(x: panel.frame.minX, y: top - height, width: panel.frame.width, height: height)
+            panel.setFrame(target, display: true, animate: true)
+        } else if !inside && controller.isHoverExpanded {
+            // Ignore exits caused by the mouse moving into a popover or menu owned by the panel.
+            let mouse = NSEvent.mouseLocation
+            if panel.frame.insetBy(dx: -2, dy: -2).contains(mouse) { return }
+            controller.isHoverExpanded = false
+            let target = NSRect(x: panel.frame.minX, y: top - zone.collapsedHeight, width: panel.frame.width, height: zone.collapsedHeight)
+            panel.setFrame(target, display: true, animate: true)
         }
     }
-    
+
     public func getOtherZoneFrames(excluding id: UUID) -> [NSRect] {
-        return zonePanels.filter { $0.key != id }.map { $0.value.frame }
+        controllers.filter { $0.key != id && $0.value.panel.isVisible }.map { $0.value.panel.frame }
     }
-    
-    public func updatePanelFrame(id: UUID, newFrame: NSRect) {
-        if let panel = zonePanels[id] {
-            panel.setFrame(newFrame, display: true)
+
+    public func snapFunction(for id: UUID) -> (NSRect, Bool) -> NSRect {
+        return { [weak self] rect, includeGrid in
+            guard let self = self else { return rect }
+            return Snapping.snap(rect, otherFrames: self.getOtherZoneFrames(excluding: id),
+                                 settings: self.state.settings, includeGrid: includeGrid)
         }
     }
-    
+
+    public func updatePanelFrame(id: UUID, newFrame: NSRect, animate: Bool = false) {
+        controllers[id]?.panel.setFrame(displayFrame(for: newFrame), display: true, animate: animate)
+    }
+
+    /// Temporarily raises a zone above other windows so the user can find it.
+    public func focusZone(id: UUID) {
+        guard let controller = controllers[id], let zone = state.zone(id: id) else { return }
+        if state.areAllZonesHidden { state.areAllZonesHidden = false }
+        let panel = controller.panel
+        panel.level = .floating
+        panel.orderFrontRegardless()
+        panel.makeKey()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let current = self?.state.zone(id: id) else { return }
+            panel.applyLevel(pinned: current.isPinnedOnTop)
+            _ = zone
+        }
+    }
+
     public func setAllZonesHidden(_ hidden: Bool) {
-        for (_, panel) in zonePanels {
-            if hidden {
-                panel.orderOut(nil)
-            } else {
-                panel.orderFront(nil)
-            }
-        }
-        for (_, panel) in widgetPanels {
-            if hidden { panel.orderOut(nil) } else { panel.orderFront(nil) }
-        }
-        for (_, panel) in stickerPanels {
+        let panels: [NSWindow] = controllers.values.map { $0.panel } + Array(widgetPanels.values) + Array(stickerPanels.values)
+        for panel in panels {
             if hidden { panel.orderOut(nil) } else { panel.orderFront(nil) }
         }
     }
-    
-    // MARK: - Widgets Sync
-    
+
+    // MARK: - Widgets
+
     public func syncAllWidgets() {
-        let widgets = AppState.shared.widgets
+        let widgets = state.widgets
         let ids = Set(widgets.map { $0.id })
-        
         for (id, panel) in widgetPanels where !ids.contains(id) {
             panel.orderOut(nil)
+            panel.close()
             widgetPanels.removeValue(forKey: id)
         }
-        
-        for widget in widgets {
-            if widgetPanels[widget.id] == nil {
-                createWidgetPanel(for: widget)
-            }
+        for widget in widgets where widgetPanels[widget.id] == nil {
+            createWidgetPanel(for: widget)
         }
     }
-    
+
     private func createWidgetPanel(for widget: DesktopWidget) {
-        let panel = NSPanel(
-            contentRect: widget.frame,
-            styleMask: [.borderless, .nonactivatingPanel, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
-        panel.level = .normal
-        panel.orderBack(nil)
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
-        
-        let view = WidgetContainerView(widgetID: widget.id)
-            .environmentObject(AppState.shared)
-        panel.contentView = NSHostingView(rootView: view)
-        
-        widgetPanels[widget.id] = panel
-        if !AppState.shared.areAllZonesHidden {
-            panel.orderFront(nil)
+        let panel = DesktopPanel(contentRect: displayFrame(for: widget.frame), resizable: true)
+        panel.minimumContentSize = NSSize(width: 160, height: 100)
+        panel.appearance = NSAppearance(named: .darkAqua)
+        panel.applySpacesBehavior(allSpaces: state.settings.showZonesOnAllSpaces)
+        let id = widget.id
+        panel.onFrameCommitted = { [weak self] frame in self?.commitWidgetFrame(id: id, frame: frame) }
+        panel.contentView = NSHostingView(rootView: WidgetContainerView(widgetID: id).environmentObject(state))
+        widgetPanels[id] = panel
+        if !state.areAllZonesHidden { panel.orderFront(nil) }
+    }
+
+    public func commitWidgetFrame(id: UUID, frame: NSRect) {
+        if let idx = state.widgets.firstIndex(where: { $0.id == id }), state.widgets[idx].frame != frame.integral {
+            state.widgets[idx].frame = frame.integral
         }
     }
-    
-    // MARK: - Stickers Sync
-    
+
+    // MARK: - Stickers
+
     public func syncAllStickers() {
-        let stickers = AppState.shared.stickers
+        let stickers = state.stickers
         let ids = Set(stickers.map { $0.id })
-        
         for (id, panel) in stickerPanels where !ids.contains(id) {
             panel.orderOut(nil)
+            panel.close()
             stickerPanels.removeValue(forKey: id)
         }
-        
-        for sticker in stickers {
-            if stickerPanels[sticker.id] == nil {
-                createStickerPanel(for: sticker)
-            }
+        for sticker in stickers where stickerPanels[sticker.id] == nil {
+            createStickerPanel(for: sticker)
         }
     }
-    
+
     private func createStickerPanel(for sticker: DesktopSticker) {
-        let panel = NSPanel(
-            contentRect: sticker.frame,
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
+        let panel = DesktopPanel(contentRect: displayFrame(for: sticker.frame), resizable: false)
         panel.hasShadow = false
-        panel.level = .normal
-        panel.orderBack(nil)
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
-        
-        let view = StickerView(stickerID: sticker.id)
-            .environmentObject(AppState.shared)
-        panel.contentView = NSHostingView(rootView: view)
-        
+        panel.applySpacesBehavior(allSpaces: state.settings.showZonesOnAllSpaces)
+        panel.contentView = NSHostingView(rootView: StickerView(stickerID: sticker.id).environmentObject(state))
         stickerPanels[sticker.id] = panel
-        if !AppState.shared.areAllZonesHidden {
-            panel.orderFront(nil)
+        if !state.areAllZonesHidden { panel.orderFront(nil) }
+    }
+
+    public func commitStickerFrame(id: UUID, frame: NSRect) {
+        if let idx = state.stickers.firstIndex(where: { $0.id == id }), state.stickers[idx].frame != frame.integral {
+            state.stickers[idx].frame = frame.integral
         }
     }
-    
-    // MARK: - Modals (Hub, Settings, Paywall, Search, Onboarding)
-    
+
+    // MARK: - Standard windows
+
+    private func makeWindow(title: String, size: NSSize, closable: Bool = true, resizable: Bool = false) -> NSWindow {
+        var style: NSWindow.StyleMask = [.titled, .miniaturizable]
+        if closable { style.insert(.closable) }
+        if resizable { style.insert(.resizable) }
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: style, backing: .buffered, defer: false)
+        window.title = title
+        window.isReleasedWhenClosed = false
+        window.center()
+        return window
+    }
+
+    private func present(_ window: NSWindow) {
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
+
     public func showHub() {
-        if let window = hubWindow {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        
-        let window = NSWindow(
-            contentRect: NSRect(x: 200, y: 200, width: 680, height: 540),
-            styleMask: [.titled, .closable, .miniaturizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "DesktopDüzen Hub"
-        window.center()
-        window.contentView = NSHostingView(rootView: HubView().environmentObject(AppState.shared))
-        window.isReleasedWhenClosed = false
-        
-        self.hubWindow = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        if let window = hubWindow { present(window); return }
+        let window = makeWindow(title: "DesktopDüzen Hub", size: NSSize(width: 700, height: 560), resizable: true)
+        window.contentMinSize = NSSize(width: 620, height: 460)
+        window.contentView = NSHostingView(rootView: HubView().environmentObject(state))
+        window.setFrameAutosaveName("DesktopDuzenHub")
+        hubWindow = window
+        present(window)
     }
-    
+
+    public func closeHub() { hubWindow?.orderOut(nil) }
+
+    public func showAbout() {
+        if let window = aboutWindow { present(window); return }
+        let window = makeWindow(title: "About DesktopDüzen", size: NSSize(width: 480, height: 520))
+        // A fixed width lets the wrapped text compute a real height (an unconstrained width
+        // made fittingSize report thousands of points).
+        let host = NSHostingView(rootView: AboutView().frame(width: 480).fixedSize())
+        window.contentView = host
+        let fitting = host.fittingSize
+        window.setContentSize(NSSize(width: 480, height: min(max(fitting.height, 300), 700)))
+        window.center()
+        aboutWindow = window
+        present(window)
+    }
+
     public func showSettings() {
-        if let window = settingsWindow {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        
-        let window = NSWindow(
-            contentRect: NSRect(x: 200, y: 200, width: 720, height: 540),
-            styleMask: [.titled, .closable, .miniaturizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "DesktopDüzen Preferences"
-        window.center()
-        window.contentView = NSHostingView(rootView: SettingsView().environmentObject(AppState.shared))
-        window.isReleasedWhenClosed = false
-        
-        self.settingsWindow = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        if let window = settingsWindow { present(window); return }
+        let window = makeWindow(title: "DesktopDüzen Preferences", size: NSSize(width: 720, height: 560), resizable: true)
+        window.contentMinSize = NSSize(width: 660, height: 460)
+        window.contentView = NSHostingView(rootView: SettingsView().environmentObject(state))
+        settingsWindow = window
+        present(window)
     }
-    
+
     public func showPaywall() {
-        if let window = paywallWindow {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        
-        let window = NSWindow(
-            contentRect: NSRect(x: 200, y: 200, width: 680, height: 600),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Upgrade to DesktopDüzen Pro"
-        window.center()
-        window.contentView = NSHostingView(rootView: PaywallView().environmentObject(AppState.shared))
-        window.isReleasedWhenClosed = false
-        
-        self.paywallWindow = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        if let window = paywallWindow { present(window); return }
+        let window = makeWindow(title: "DesktopDüzen Pro", size: NSSize(width: 680, height: 600))
+        window.contentView = NSHostingView(rootView: PaywallView().environmentObject(state))
+        paywallWindow = window
+        present(window)
     }
-    
+
+    public func closePaywall() { paywallWindow?.orderOut(nil) }
+
     public func showOnboarding() {
-        if let window = onboardingWindow {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        
-        let window = NSWindow(
-            contentRect: NSRect(x: 200, y: 200, width: 620, height: 480),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Welcome to DesktopDüzen"
-        window.center()
-        window.contentView = NSHostingView(rootView: OnboardingView().environmentObject(AppState.shared))
-        window.isReleasedWhenClosed = false
-        
-        self.onboardingWindow = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        if let window = onboardingWindow { present(window); return }
+        let window = makeWindow(title: "Welcome to DesktopDüzen", size: NSSize(width: 560, height: 420))
+        window.contentView = NSHostingView(rootView: OnboardingView().environmentObject(state))
+        onboardingWindow = window
+        present(window)
     }
-    
+
+    public func closeOnboarding() { onboardingWindow?.orderOut(nil) }
+
     public func toggleGlobalSearch() {
         if let search = searchWindow, search.isVisible {
             search.orderOut(nil)
             return
         }
-        
         if searchWindow == nil {
-            let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 600, height: 420),
-                styleMask: [.borderless, .nonactivatingPanel],
-                backing: .buffered,
-                defer: false
-            )
+            let panel = KeyablePanel(contentRect: NSRect(x: 0, y: 0, width: 560, height: 380),
+                                     styleMask: [.borderless, .titled, .fullSizeContentView],
+                                     backing: .buffered, defer: false)
+            panel.titleVisibility = .hidden
+            panel.titlebarAppearsTransparent = true
+            panel.standardWindowButton(.closeButton)?.isHidden = true
+            panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+            panel.standardWindowButton(.zoomButton)?.isHidden = true
+            panel.isMovableByWindowBackground = true
             panel.isOpaque = false
             panel.backgroundColor = .clear
             panel.hasShadow = true
             panel.level = .floating
-            panel.center()
-            panel.contentView = NSHostingView(rootView: GlobalSearchView().environmentObject(AppState.shared))
-            self.searchWindow = panel
+            panel.hidesOnDeactivate = true
+            panel.isReleasedWhenClosed = false
+            panel.onCancel = { [weak panel] in panel?.orderOut(nil) }
+            panel.contentView = NSHostingView(rootView: GlobalSearchView().environmentObject(state))
+            searchWindow = panel
         }
-        
         searchWindow?.center()
-        searchWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        searchWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    public func closeSearch() { searchWindow?.orderOut(nil) }
+
+    /// Releases every panel (used on termination so the state is flushed before windows vanish).
+    public func tearDown() {
+        for controller in controllers.values { controller.store.stop() }
     }
 }

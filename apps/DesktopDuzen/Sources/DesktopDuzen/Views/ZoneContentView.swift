@@ -4,404 +4,394 @@ import UniformTypeIdentifiers
 
 public struct ZoneContentView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var controller: ZoneController
+    @EnvironmentObject var store: ZoneFileStore
     let zoneID: UUID
-    
-    @State private var files: [FileItem] = []
+
     @State private var selectedFilePaths: Set<String> = []
-    @State private var isEditingTitle: Bool = false
-    @State private var isDropTargeted: Bool = false
-    @State private var errorMessageBanner: String? = nil
-    
-    @State private var folderMonitor: FolderMonitor?
-    
-    private var zone: ZoneModel? {
-        appState.zones.first(where: { $0.id == zoneID })
+    @State private var isDropTargeted = false
+    @State private var banner: String?
+
+    public init(zoneID: UUID) {
+        self.zoneID = zoneID
     }
-    
+
     public var body: some View {
-        if let currentZone = zone {
-            let theme = ThemePresets.theme(for: currentZone.themeID)
-            
+        if let zone = appState.zone(id: zoneID) {
+            let palette = ZonePalette.forZone(zone)
+            let showBody = !zone.isCollapsed || controller.isHoverExpanded
+
             ZStack(alignment: .bottomTrailing) {
                 VStack(spacing: 0) {
-                    // Title Bar / Header (Drag Area)
-                    ZoneHeaderView(appState: appState, zone: currentZone, isEditingTitle: $isEditingTitle)
-                        .background(Color.white.opacity(0.06))
-                        .gesture(
-                            DragGesture(minimumDistance: 3)
-                                .onChanged { value in
-                                    handleWindowDrag(translation: value.translation)
-                                }
-                        )
-                    
-                    // Error / Toast Banner
-                    if let error = errorMessageBanner {
-                        HStack(spacing: 6) {
-                            Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundColor(.yellow)
-                            Text(error)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.white)
-                            Spacer()
-                            Button(action: { errorMessageBanner = nil }) {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.white.opacity(0.7))
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Color.black.opacity(0.75))
+                    ZoneHeaderView(zone: zone)
+                        .background(palette.controlFill.opacity(0.6))
+
+                    if let message = banner ?? store.lastError {
+                        bannerView(message, palette: palette)
                     }
-                    
-                    // Body (when not collapsed)
-                    if !currentZone.isCollapsed {
-                        ZStack {
-                            if currentZone.type == .app {
-                                if currentZone.apps.isEmpty {
-                                    emptyDropInvitation(text: "Drop applications (.app) here\nor click + to add shortcuts")
-                                } else {
-                                    AppZoneView(appState: appState, zone: currentZone)
-                                }
-                            } else {
-                                if files.isEmpty {
-                                    emptyDropInvitation(text: "Drag desktop files here to organize")
-                                } else {
-                                    if currentZone.viewMode == .icon {
-                                        ZoneIconGridView(
-                                            appState: appState,
-                                            zone: currentZone,
-                                            files: sortedFiles(files, mode: currentZone.sortMode),
-                                            selectedFilePaths: $selectedFilePaths,
-                                            onFileDoubleClicked: openFile,
-                                            onFileRenamed: renameFile,
-                                            onFileDeleted: deleteFile
-                                        )
-                                    } else {
-                                        ZoneListView(
-                                            appState: appState,
-                                            zone: currentZone,
-                                            files: sortedFiles(files, mode: currentZone.sortMode),
-                                            selectedFilePaths: $selectedFilePaths,
-                                            onFileDoubleClicked: openFile,
-                                            onFileRenamed: renameFile,
-                                            onFileDeleted: deleteFile
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    if showBody {
+                        zoneBody(zone, palette: palette)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
-                
-                // Resize Handle in bottom right corner
-                if !currentZone.isCollapsed {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.white.opacity(0.4))
-                        .padding(6)
-                        .gesture(
-                            DragGesture(minimumDistance: 1)
-                                .onChanged { value in
-                                    handleWindowResize(translation: value.translation)
-                                }
-                        )
+
+                if showBody && !zone.isCollapsed {
+                    ZStack {
+                        WindowResizeGrip(minSize: NSSize(width: 220, height: 120)) { frame in
+                            appState.updateZoneFrame(id: zoneID, frame: frame)
+                        }
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(palette.secondary)
+                            .allowsHitTesting(false)
+                    }
+                    .frame(width: 18, height: 18)
+                    .padding(3)
+                    .help("Drag to resize")
                 }
             }
-            .background(
-                ZStack {
-                    // Material Blur
-                    VisualEffectBlur(material: visualEffectMaterial(theme.materialStyle))
-                    
-                    // Background Color Tint & Opacity
-                    Color(hex: theme.backgroundHex)
-                        .opacity(theme.backgroundOpacity)
-                }
-            )
-            .cornerRadius(CGFloat(theme.cornerRadius))
+            .background(ZoneBackgroundView(palette: palette))
+            .clipShape(RoundedRectangle(cornerRadius: CGFloat(palette.cornerRadius), style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: CGFloat(theme.cornerRadius))
-                    .stroke(
-                        isDropTargeted ? Color(hex: theme.accentColorHex) : Color(hex: theme.borderHex),
-                        lineWidth: isDropTargeted ? 2.5 : CGFloat(theme.borderWidth)
-                    )
+                RoundedRectangle(cornerRadius: CGFloat(palette.cornerRadius), style: .continuous)
+                    .strokeBorder(isDropTargeted ? palette.accent : palette.border,
+                                  lineWidth: isDropTargeted ? 2.5 : CGFloat(palette.borderWidth))
             )
-            .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: 4)
-            .onAppear {
-                setupFolderMonitor(for: currentZone)
-                reloadFiles(for: currentZone)
+            .environment(\.zonePalette, palette)
+            .environment(\.colorScheme, palette.colorScheme)
+            .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
+                handleDrop(providers: providers, zone: zone)
             }
-            .onChange(of: currentZone.backingFolderPath) { _ in
-                setupFolderMonitor(for: currentZone)
-                reloadFiles(for: currentZone)
-            }
-            .onChange(of: currentZone.activeTabID) { _ in
-                setupFolderMonitor(for: currentZone)
-                reloadFiles(for: currentZone)
-            }
-            .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
-                handleDrop(providers: providers, zone: currentZone)
-            }
-            // Spacebar QuickLook key listener
-            .background(KeyEventHandlerView { event in
-                if event.keyCode == 49 { // Spacebar
-                    let selectedURLs = files.filter { selectedFilePaths.contains($0.path) }.map { $0.url }
-                    if !selectedURLs.isEmpty {
-                        QuickLookManager.shared.togglePreview(urls: selectedURLs)
-                        return true
-                    }
-                }
-                return false
-            })
+            .background(KeyEventHandlerView { event in handleKey(event, zone: zone) })
+            .onChange(of: zone.manualOrder) { order in store.updateManualOrder(order) }
+        } else {
+            Color.clear
         }
     }
-    
+
+    // MARK: - Body
+
     @ViewBuilder
-    private func emptyDropInvitation(text: String) -> some View {
+    private func zoneBody(_ zone: ZoneModel, palette: ZonePalette) -> some View {
+        if zone.type == .app {
+            if zone.apps.isEmpty {
+                emptyState("Drop applications here\nor use + to add shortcuts", icon: "square.grid.2x2", palette: palette)
+            } else {
+                AppZoneView(zone: zone)
+            }
+        } else if store.folderMissing {
+            missingFolderState(zone, palette: palette)
+        } else if store.files.isEmpty {
+            emptyState(zone.type == .file ? "Drag files here to organize them" : "This folder is empty",
+                       icon: "tray.and.arrow.down", palette: palette)
+        } else {
+            let sorted = ZoneSorting.sorted(store.files, mode: zone.sortMode)
+            if zone.viewMode == .icon {
+                ZoneIconGridView(zone: zone, files: sorted, selectedFilePaths: $selectedFilePaths,
+                                 actions: fileActions(for: zone))
+            } else {
+                ZoneListView(zone: zone, files: sorted, selectedFilePaths: $selectedFilePaths,
+                             actions: fileActions(for: zone))
+            }
+        }
+    }
+
+    private func emptyState(_ text: String, icon: String, palette: ZonePalette) -> some View {
         VStack(spacing: 8) {
-            Image(systemName: "tray.and.arrow.down")
-                .font(.system(size: 28, weight: .light))
-                .foregroundColor(.white.opacity(0.35))
+            Image(systemName: icon)
+                .font(.system(size: 26, weight: .light))
+                .foregroundColor(palette.secondary)
             Text(text)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.white.opacity(0.45))
+                .foregroundColor(palette.secondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(20)
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture { selectedFilePaths = [] }
+    }
+
+    private func missingFolderState(_ zone: ZoneModel, palette: ZonePalette) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: "externaldrive.badge.exclamationmark")
+                .font(.system(size: 24))
+                .foregroundColor(palette.secondary)
+            Text("Folder not available")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(palette.primary)
+            Text(zone.resolvedFolderPath)
+                .font(.system(size: 10))
+                .foregroundColor(palette.secondary)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .multilineTextAlignment(.center)
+            Text("It may have been renamed, deleted, or be on a disconnected drive. The zone reconnects automatically when it returns.")
+                .font(.system(size: 10))
+                .foregroundColor(palette.secondary)
+                .multilineTextAlignment(.center)
+            if zone.type == .file {
+                Button("Recreate Empty Folder") {
+                    try? FileManager.default.createDirectory(atPath: zone.resolvedFolderPath, withIntermediateDirectories: true)
+                    store.watch(path: "", manualOrder: zone.manualOrder)
+                    store.watch(path: zone.resolvedFolderPath, manualOrder: zone.manualOrder)
+                }
+                .controlSize(.small)
+            }
+        }
+        .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
-    // MARK: - File Monitoring & Loading
-    
-    private func setupFolderMonitor(for zone: ZoneModel) {
-        folderMonitor?.stop()
-        folderMonitor = nil
-        
-        guard zone.type != .app else { return }
-        let path = zone.resolvedFolderPath
-        guard !path.isEmpty else { return }
-        
-        let url = URL(fileURLWithPath: path)
-        let monitor = FolderMonitor(url: url)
-        monitor.onChange = { [weak appState] in
-            guard let appState = appState, let current = appState.zones.first(where: { $0.id == zoneID }) else { return }
-            self.reloadFiles(for: current)
+
+    private func bannerView(_ message: String, palette: ZonePalette) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+            Text(message)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(palette.primary)
+                .lineLimit(3)
+            Spacer(minLength: 4)
+            Button {
+                banner = nil
+                store.reportError(nil)
+            } label: {
+                Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundColor(palette.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Dismiss")
         }
-        monitor.start()
-        self.folderMonitor = monitor
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(palette.controlFillStrong)
     }
-    
-    private func reloadFiles(for zone: ZoneModel) {
-        guard zone.type != .app else { return }
-        let path = zone.resolvedFolderPath
-        guard !path.isEmpty else {
-            self.files = []
+
+    // MARK: - File actions
+
+    private func fileActions(for zone: ZoneModel) -> ZoneFileActions {
+        ZoneFileActions(
+            open: { file in
+                if !NSWorkspace.shared.open(file.url) { banner = "Could not open “\(file.name)”." }
+            },
+            rename: { file, newName in
+                if case .failure(let error) = appState.fileService.renameFile(at: file.url, to: newName) {
+                    banner = error.localizedDescription
+                }
+                store.reload()
+            },
+            duplicate: { file in
+                if case .failure(let error) = appState.fileService.duplicateFile(at: file.url) {
+                    banner = error.localizedDescription
+                }
+                store.reload()
+            },
+            trash: { files in
+                let names = files.map(\.name)
+                let alert = NSAlert()
+                alert.messageText = files.count == 1 ? "Move “\(names[0])” to the Trash?" : "Move \(files.count) items to the Trash?"
+                alert.informativeText = "You can restore items from the Trash in Finder."
+                alert.addButton(withTitle: "Move to Trash")
+                alert.addButton(withTitle: "Cancel")
+                guard alert.runModal() == .alertFirstButtonReturn else { return }
+                let failed = files.filter { !appState.fileService.trashFile(url: $0.url) }
+                if !failed.isEmpty { banner = "Could not move \(failed.count) item(s) to the Trash." }
+                selectedFilePaths.subtract(files.map(\.path))
+                store.reload()
+            },
+            moveToZone: { files, target in
+                let dest = URL(fileURLWithPath: target.resolvedFolderPath, isDirectory: true)
+                var failures = 0
+                for file in files {
+                    if case .failure = appState.fileService.transfer(file.url, toDirectory: dest, mode: .move) { failures += 1 }
+                }
+                if failures > 0 { banner = "\(failures) item(s) could not be moved to “\(target.title)”." }
+                store.reload()
+            },
+            reorder: { orderedNames in
+                appState.mutateZone(id: zoneID) { z in
+                    z.manualOrder = orderedNames
+                    z.sortMode = .manual
+                }
+            },
+            acceptDrop: { url, copy in processDroppedURL(url, zone: zone, copy: copy) },
+            otherZones: appState.zones.filter { $0.id != zone.id && $0.type != .app }
+        )
+    }
+
+    private func handleKey(_ event: NSEvent, zone: ZoneModel) -> Bool {
+        let selected = store.files.filter { selectedFilePaths.contains($0.path) }
+        switch event.keyCode {
+        case 49: // Space
+            guard !selected.isEmpty else { return false }
+            QuickLookManager.shared.togglePreview(urls: selected.map(\.url))
+            return true
+        case 36, 76: // Return / Enter opens, like Finder's Cmd-O
+            guard !selected.isEmpty, event.modifierFlags.contains(.command) else { return false }
+            selected.forEach { NSWorkspace.shared.open($0.url) }
+            return true
+        case 51 where event.modifierFlags.contains(.command): // Cmd-Delete
+            guard !selected.isEmpty else { return false }
+            fileActions(for: zone).trash(selected)
+            return true
+        case 0 where event.modifierFlags.contains(.command): // Cmd-A
+            selectedFilePaths = Set(store.files.map(\.path))
+            return true
+        default:
+            return false
+        }
+    }
+
+    // MARK: - Drop handling
+
+    private func handleDrop(providers: [NSItemProvider], zone: ZoneModel) -> Bool {
+        let copyRequested = NSEvent.modifierFlags.contains(.option)
+        var accepted = false
+        for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            accepted = true
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                var url: URL?
+                if let data = item as? Data { url = URL(dataRepresentation: data, relativeTo: nil) }
+                else if let u = item as? URL { url = u }
+                guard let fileURL = url else { return }
+                DispatchQueue.main.async { processDroppedURL(fileURL, zone: zone, copy: copyRequested) }
+            }
+        }
+        return accepted
+    }
+
+    private func processDroppedURL(_ url: URL, zone: ZoneModel, copy: Bool) {
+        let fs = appState.fileService
+        if zone.type == .app {
+            guard fs.isApplication(at: url), let item = fs.resolveAppInfo(at: url.path) else {
+                banner = "App Zones hold applications only. Use a File Zone for documents."
+                return
+            }
+            appState.mutateZone(id: zone.id) { z in
+                if !z.apps.contains(where: { $0.path == item.path }) {
+                    var app = item
+                    app.order = z.apps.count
+                    z.apps.append(app)
+                }
+            }
             return
         }
-        self.files = FileManagerService.shared.contentsOfFolder(path: path, manualOrder: zone.manualOrder)
-    }
-    
-    // MARK: - Sorting
-    
-    private func sortedFiles(_ input: [FileItem], mode: ZoneSortMode) -> [FileItem] {
-        switch mode {
-        case .manual:
-            return input.sorted { $0.manualOrder < $1.manualOrder }
-        case .nameAsc:
-            return input.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        case .nameDesc:
-            return input.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedDescending }
-        case .dateDesc:
-            return input.sorted { $0.modificationDate > $1.modificationDate }
-        case .dateAsc:
-            return input.sorted { $0.modificationDate < $1.modificationDate }
-        case .sizeDesc:
-            return input.sorted { $0.size > $1.size }
-        case .sizeAsc:
-            return input.sorted { $0.size < $1.size }
-        case .kind:
-            return input.sorted { $0.kindDescription.localizedCaseInsensitiveCompare($1.kindDescription) == .orderedAscending }
-        }
-    }
-    
-    // MARK: - File Actions
-    
-    private func openFile(_ file: FileItem) {
-        NSWorkspace.shared.open(file.url)
-    }
-    
-    private func renameFile(_ file: FileItem, newName: String) {
-        guard let current = zone else { return }
-        if FileManagerService.shared.renameFile(at: file.url, to: newName) != nil {
-            reloadFiles(for: current)
-        }
-    }
-    
-    private func deleteFile(_ file: FileItem) {
-        guard let current = zone else { return }
-        if FileManagerService.shared.trashFile(url: file.url) {
-            reloadFiles(for: current)
-        }
-    }
-    
-    // MARK: - Drag and Drop Handling
-    
-    private func handleDrop(providers: [NSItemProvider], zone: ZoneModel) -> Bool {
-        var didAccept = false
-        
-        for provider in providers {
-            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                    guard let data = item as? Data,
-                          let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-                    
-                    DispatchQueue.main.async {
-                        self.processDroppedURL(url, zone: zone)
-                    }
-                }
-                didAccept = true
-            }
-        }
-        return didAccept
-    }
-    
-    private func processDroppedURL(_ url: URL, zone: ZoneModel) {
-        if zone.type == .app {
-            // App Zone: Only accept .app bundles
-            if FileManagerService.shared.isApplication(at: url) {
-                if let appItem = FileManagerService.shared.resolveAppInfo(at: url.path) {
-                    var updated = zone
-                    if !updated.apps.contains(where: { $0.path == appItem.path }) {
-                        updated.apps.append(appItem)
-                        appState.updateZone(updated)
-                    }
-                }
-            } else {
-                // Clear warning banner as specified in recon!
-                errorMessageBanner = "App Zones only hold applications (.app). To store files, create a File Zone!"
-            }
-        } else {
-            // File Zone or Folder Zone: Move file into zone folder!
-            let destFolder = URL(fileURLWithPath: zone.resolvedFolderPath)
-            if FileManagerService.shared.moveFile(from: url, toDirectory: destFolder, collisionOption: .keepBoth) != nil {
-                reloadFiles(for: zone)
-            }
-        }
-    }
-    
-    // MARK: - Window Dragging & Resizing with Snapping
-    
-    @State private var dragStartFrame: NSRect? = nil
-    
-    private func handleWindowDrag(translation: CGSize) {
-        guard var current = zone else { return }
-        if dragStartFrame == nil {
-            dragStartFrame = current.frame
-        }
-        
-        guard let start = dragStartFrame else { return }
-        var targetRect = NSRect(
-            x: start.origin.x + translation.width,
-            y: start.origin.y - translation.height, // AppKit coordinate system has 0 at bottom
-            width: start.width,
-            height: start.height
-        )
-        
-        // Snapping calculations
-        let otherFrames = WindowManager.shared.getOtherZoneFrames(excluding: current.id)
-        if appState.settings.alignmentMode {
-            if let panel = NSApp.windows.first(where: { ($0 as? ZonePanel)?.zoneID == current.id }) as? ZonePanel {
-                targetRect = panel.snapFrame(targetRect, otherFrames: otherFrames)
-            }
-        }
-        
-        current.frame = targetRect
-        appState.updateZone(current)
-        WindowManager.shared.updatePanelFrame(id: current.id, newFrame: targetRect)
-        
-        // Clear dragStart on end or keep tracking
-        if abs(translation.width) < 1 && abs(translation.height) < 1 {
-            dragStartFrame = nil
-        }
-    }
-    
-    private func handleWindowResize(translation: CGSize) {
-        guard var current = zone else { return }
-        let newWidth = max(220, current.frame.width + translation.width)
-        var newHeight = max(140, current.frame.height + translation.height)
-        
-        if current.isCollapsed {
-            newHeight = current.collapsedHeight
-        }
-        
-        var newFrame = current.frame
-        newFrame.origin.y -= (newHeight - newFrame.height)
-        newFrame.size.width = newWidth
-        newFrame.size.height = newHeight
-        
-        current.frame = newFrame
-        current.expandedHeight = newHeight
-        appState.updateZone(current)
-        WindowManager.shared.updatePanelFrame(id: current.id, newFrame: newFrame)
-    }
-    
-    private func visualEffectMaterial(_ style: String) -> NSVisualEffectView.Material {
-        switch style {
-        case "ultraThin": return .underWindowBackground
-        case "regular": return .headerView
-        case "thick": return .popover
-        default: return .hudWindow
+        let dest = URL(fileURLWithPath: zone.resolvedFolderPath, isDirectory: true)
+        // Like Finder: move within a volume, copy across volumes, Option forces a copy.
+        let mode: TransferMode = (copy || !fs.isSameVolume(url, dest)) ? .copy : .move
+        switch fs.transfer(url, toDirectory: dest, mode: mode, collision: .keepBoth) {
+        case .success:
+            store.reload()
+        case .failure(let error):
+            banner = error.localizedDescription
         }
     }
 }
 
-// MARK: - NSVisualEffectView Bridge for SwiftUI
+// MARK: - Shared helpers
+
+public struct ZoneFileActions {
+    public var open: (FileItem) -> Void
+    public var rename: (FileItem, String) -> Void
+    public var duplicate: (FileItem) -> Void
+    public var trash: ([FileItem]) -> Void
+    public var moveToZone: ([FileItem], ZoneModel) -> Void
+    public var reorder: ([String]) -> Void
+    /// Handles a file dropped onto an item that does not come from this zone.
+    public var acceptDrop: (URL, Bool) -> Void
+    public var otherZones: [ZoneModel]
+}
+
+public enum ZoneSorting {
+    public static func sorted(_ input: [FileItem], mode: ZoneSortMode) -> [FileItem] {
+        let byName: (FileItem, FileItem) -> Bool = { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        switch mode {
+        case .manual:
+            return input.sorted { $0.manualOrder != $1.manualOrder ? $0.manualOrder < $1.manualOrder : byName($0, $1) }
+        case .nameAsc: return input.sorted(by: byName)
+        case .nameDesc: return input.sorted { byName($1, $0) }
+        case .dateDesc: return input.sorted { $0.modificationDate != $1.modificationDate ? $0.modificationDate > $1.modificationDate : byName($0, $1) }
+        case .dateAsc: return input.sorted { $0.modificationDate != $1.modificationDate ? $0.modificationDate < $1.modificationDate : byName($0, $1) }
+        case .sizeDesc: return input.sorted { $0.size != $1.size ? $0.size > $1.size : byName($0, $1) }
+        case .sizeAsc: return input.sorted { $0.size != $1.size ? $0.size < $1.size : byName($0, $1) }
+        case .kind:
+            return input.sorted {
+                let c = $0.kindDescription.localizedCaseInsensitiveCompare($1.kindDescription)
+                return c == .orderedSame ? byName($0, $1) : c == .orderedAscending
+            }
+        }
+    }
+}
+
+// MARK: - NSVisualEffectView bridge
 
 public struct VisualEffectBlur: NSViewRepresentable {
     public var material: NSVisualEffectView.Material
+    public var appearance: NSAppearance?
     public var blendingMode: NSVisualEffectView.BlendingMode = .behindWindow
-    
+
+    public init(material: NSVisualEffectView.Material, appearance: NSAppearance? = nil,
+                blendingMode: NSVisualEffectView.BlendingMode = .behindWindow) {
+        self.material = material
+        self.appearance = appearance
+        self.blendingMode = blendingMode
+    }
+
     public func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = blendingMode
         view.state = .active
+        updateNSView(view, context: context)
         return view
     }
-    
+
     public func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = material
-        nsView.blendingMode = blendingMode
+        if nsView.material != material { nsView.material = material }
+        if nsView.blendingMode != blendingMode { nsView.blendingMode = blendingMode }
+        // Forcing the appearance keeps the blur light or dark to match the tint, regardless of
+        // the system appearance, so the computed text colour stays valid.
+        if nsView.appearance?.name != appearance?.name { nsView.appearance = appearance }
     }
 }
 
-// MARK: - Key Event Monitor View for Spacebar QuickLook
+// MARK: - Key handling
 
 public struct KeyEventHandlerView: NSViewRepresentable {
     public var onKeyDown: (NSEvent) -> Bool
-    
+
     public func makeNSView(context: Context) -> KeyView {
         let view = KeyView()
         view.onKeyDown = onKeyDown
         return view
     }
-    
+
     public func updateNSView(_ nsView: KeyView, context: Context) {
         nsView.onKeyDown = onKeyDown
     }
-    
-    public class KeyView: NSView {
+
+    public final class KeyView: NSView {
         public var onKeyDown: ((NSEvent) -> Bool)?
-        
-        public override var acceptsFirstResponder: Bool { true }
-        
-        public override func keyDown(with event: NSEvent) {
-            if let handler = onKeyDown, handler(event) {
-                return
+        private var monitor: Any?
+
+        public override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let monitor = monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+            guard window != nil else { return }
+            // A local monitor scoped to this window: works whichever subview is first responder,
+            // but never steals keys from text fields that are editing.
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self = self, let window = self.window, event.window === window else { return event }
+                if window.firstResponder is NSText { return event }
+                return (self.onKeyDown?(event) ?? false) ? nil : event
             }
-            super.keyDown(with: event)
+        }
+
+        public override func removeFromSuperview() {
+            if let monitor = monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+            super.removeFromSuperview()
+        }
+
+        deinit {
+            if let monitor = monitor { NSEvent.removeMonitor(monitor) }
         }
     }
 }

@@ -2,61 +2,128 @@ import Cocoa
 import SwiftUI
 
 public class AppDelegate: NSObject, NSApplicationDelegate {
+    private var keyMonitor: Any?
+
     public func applicationDidFinishLaunching(_ notification: Notification) {
-        // Enforce Single Instance: Kill or activate existing instance
+        // Single instance: hand over to the copy that is already running.
         let bundleID = Bundle.main.bundleIdentifier ?? "com.desktopduzen.app"
-        let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
-        if runningApps.count > 1 {
-            for app in runningApps where app != NSRunningApplication.current {
-                app.activate(options: [.activateIgnoringOtherApps])
-            }
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .filter { $0 != NSRunningApplication.current && !$0.isTerminated }
+        if let existing = others.first {
+            existing.activate(options: [])
             NSApp.terminate(nil)
             return
         }
-        
-        // Configure Activation Policy: Regular allows Dock icon and menu bar access
+
         NSApp.setActivationPolicy(.regular)
-        
-        // Initialize Status Menu Bar Item
+        installMainMenu()
+
+        let state = AppState.shared
         MenuBarManager.shared.setupMenuBar()
-        
-        // Start Window Manager (syncs all zones, widgets, stickers onto desktop canvas)
         WindowManager.shared.start()
-        
-        // Show Welcome / Onboarding on first run, or show Hub window
-        if !AppState.shared.settings.hasCompletedOnboarding {
+
+        // Keep the stored preference consistent with what macOS actually has registered.
+        let registered = LaunchAtLoginService.shared.isEnabled
+        if state.settings.launchAtLogin != registered { state.settings.launchAtLogin = registered }
+
+        ZoneActions.applyAutoSortMonitoring()
+
+        if !state.settings.hasCompletedOnboarding {
             WindowManager.shared.showOnboarding()
-        } else {
+        } else if state.settings.showHubOnLaunch || state.recoveredCorruptStateFile != nil {
             WindowManager.shared.showHub()
         }
-        
-        // Start Auto-Sort if enabled
-        if AppState.shared.settings.autoSortEnabled && AppState.shared.isPro {
-            AutoSortService.shared.startMonitoring(
-                rules: AppState.shared.autoSortRules,
-                zones: AppState.shared.zones,
-                isPro: AppState.shared.isPro
-            )
-        }
-        
-        // Global Hotkey for Cmd+Shift+Space (Global Search)
-        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if event.modifierFlags.contains([.command, .shift]) && event.keyCode == 49 {
+
+        // Cmd-Shift-Space opens search while DesktopDüzen is active.
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if flags == [.command, .shift] && event.keyCode == 49 && AppState.shared.settings.globalHotkeyEnabled {
                 WindowManager.shared.toggleGlobalSearch()
                 return nil
             }
             return event
         }
     }
-    
-    // When user clicks Dock icon or relaunches from Applications/Finder, show Hub / Settings
+
     public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        NSApp.activate(ignoringOtherApps: true)
         WindowManager.shared.showHub()
         return true
     }
-    
+
     public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        return false
+        false
     }
+
+    public func applicationWillTerminate(_ notification: Notification) {
+        // Flush immediately; the debounced autosave may not have fired yet.
+        AppState.shared.saveState()
+        AutoSortService.shared.stopMonitoring()
+        WindowManager.shared.tearDown()
+        if let monitor = keyMonitor { NSEvent.removeMonitor(monitor) }
+    }
+
+    /// Without a main menu, Cut/Copy/Paste/Undo and Select All do not reach text fields.
+    private func installMainMenu() {
+        let main = NSMenu()
+
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu()
+        let about = NSMenuItem(title: "About DesktopDüzen", action: #selector(openAbout), keyEquivalent: "")
+        about.target = self
+        appMenu.addItem(about)
+        appMenu.addItem(.separator())
+        let prefs = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        prefs.target = self
+        appMenu.addItem(prefs)
+        let hub = NSMenuItem(title: "Open Hub", action: #selector(openHub), keyEquivalent: "0")
+        hub.target = self
+        appMenu.addItem(hub)
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Hide DesktopDüzen", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "Quit DesktopDüzen", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu = appMenu
+        main.addItem(appItem)
+
+        let fileItem = NSMenuItem()
+        let fileMenu = NSMenu(title: "File")
+        let newZone = NSMenuItem(title: "New File Zone…", action: #selector(newFileZone), keyEquivalent: "n")
+        newZone.target = self
+        fileMenu.addItem(newZone)
+        let search = NSMenuItem(title: "Search Zones…", action: #selector(openSearch), keyEquivalent: "f")
+        search.target = self
+        fileMenu.addItem(search)
+        fileMenu.addItem(.separator())
+        fileMenu.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        fileItem.submenu = fileMenu
+        main.addItem(fileItem)
+
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(redo)
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = editMenu
+        main.addItem(editItem)
+
+        let windowItem = NSMenuItem()
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowItem.submenu = windowMenu
+        main.addItem(windowItem)
+        NSApp.windowsMenu = windowMenu
+
+        NSApp.mainMenu = main
+    }
+
+    @objc private func openSettings() { WindowManager.shared.showSettings() }
+    @objc private func openAbout() { WindowManager.shared.showAbout() }
+    @objc private func openHub() { WindowManager.shared.showHub() }
+    @objc private func newFileZone() { ZoneActions.createFileZone() }
+    @objc private func openSearch() { WindowManager.shared.toggleGlobalSearch() }
 }

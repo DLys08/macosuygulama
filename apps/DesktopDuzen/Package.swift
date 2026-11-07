@@ -14,7 +14,8 @@ let package = Package(
         .executableTarget(
             name: "DesktopDuzen",
             dependencies: [],
-            path: "Sources/DesktopDuzen"
+            path: "Sources/DesktopDuzen",
+            exclude: ["Resources/README.md"]
         ),
         .testTarget(
             name: "DesktopDuzenTests",

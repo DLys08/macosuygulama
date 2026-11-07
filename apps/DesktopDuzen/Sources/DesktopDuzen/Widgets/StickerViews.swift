@@ -4,37 +4,37 @@ import AppKit
 public struct StickerView: View {
     @EnvironmentObject var appState: AppState
     let stickerID: UUID
-    @State private var isHovering: Bool = false
-    
-    private var sticker: DesktopSticker? {
-        appState.stickers.first(where: { $0.id == stickerID })
-    }
-    
+    @State private var isHovering = false
+
     public var body: some View {
-        if let current = sticker {
+        if let sticker = appState.stickers.first(where: { $0.id == stickerID }) {
             ZStack(alignment: .topTrailing) {
-                Text(current.content)
+                Text(sticker.content)
                     .font(.system(size: 48))
-                    .padding(12)
-                    .rotationEffect(.degrees(current.rotationDegrees))
-                    .scaleEffect(current.scale)
-                
+                    .rotationEffect(.degrees(sticker.rotationDegrees))
+                    .scaleEffect(sticker.scale)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
+
                 if isHovering {
-                    Button(action: {
-                        appState.stickers.removeAll(where: { $0.id == stickerID })
-                    }) {
+                    Button {
+                        appState.stickers.removeAll { $0.id == stickerID }
+                    } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.8))
+                            .font(.system(size: 15))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(Color.white, Color.black.opacity(0.65))
                     }
-                    .buttonStyle(PlainButtonStyle())
-                    .padding(4)
+                    .buttonStyle(.plain)
+                    .padding(2)
+                    .help("Remove sticker")
                 }
             }
+            .background(WindowDragArea(onDragEnded: { frame in
+                WindowManager.shared.commitStickerFrame(id: stickerID, frame: frame)
+            }))
             .contentShape(Rectangle())
-            .onHover { hover in
-                self.isHovering = hover
-            }
+            .onHover { isHovering = $0 }
         }
     }
 }

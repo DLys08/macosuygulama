@@ -11,7 +11,7 @@ public struct OnboardingView: View {
                 VStack(spacing: 12) {
                     Image(systemName: "square.grid.2x2.fill")
                         .font(.system(size: 48))
-                        .foregroundColor(.cyan)
+                        .foregroundColor(.accentColor)
                     
                     Text("Welcome to DesktopDüzen")
                         .font(.system(size: 20, weight: .bold))
@@ -54,7 +54,7 @@ public struct OnboardingView: View {
                     HStack(spacing: 12) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.green)
-                        Text("Desktop folder access granted (~/Desktop/Zones)")
+                        Text(FileManager.default.isWritableFile(atPath: appState.fileService.desktopURL.path) ? "Desktop is writable. Zone folders live in ~/Desktop/Zones" : "Desktop not writable yet. Allow access in System Settings > Privacy & Security > Files and Folders")
                             .font(.system(size: 12, weight: .medium))
                     }
                     .padding(10)
@@ -70,7 +70,7 @@ public struct OnboardingView: View {
                     
                     Button("Get Started") {
                         appState.settings.hasCompletedOnboarding = true
-                        NSApp.keyWindow?.orderOut(nil)
+                        WindowManager.shared.closeOnboarding()
                         WindowManager.shared.showHub()
                     }
                     .buttonStyle(.borderedProminent)
@@ -87,7 +87,7 @@ public struct OnboardingView: View {
         VStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 22))
-                .foregroundColor(.cyan)
+                .foregroundColor(.accentColor)
             Text(title)
                 .font(.system(size: 12, weight: .bold))
             Text(desc)
@@ -97,7 +97,7 @@ public struct OnboardingView: View {
         }
         .frame(width: 130)
         .padding(10)
-        .background(Color.white.opacity(0.04))
+        .background(Color.primary.opacity(0.04))
         .cornerRadius(10)
     }
 }
