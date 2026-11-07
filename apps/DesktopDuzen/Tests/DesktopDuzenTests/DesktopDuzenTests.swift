@@ -807,3 +807,13 @@ final class WallpaperStoreTests: XCTestCase {
         XCTAssertEqual(WallpaperSampler.source(inStore: withDefault, displayUUID: "D1"), .solid(0))
     }
 }
+
+final class HoverTitleTests: XCTestCase {
+    func testHoverTitlesDefaultOnAndPersist() throws {
+        XCTAssertTrue(AppSettings().hideTitleBarsUntilHover)
+        let old = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"gridSize":15}"#.utf8))
+        XCTAssertTrue(old.hideTitleBarsUntilHover, "existing users get the new behaviour")
+        var s = AppSettings(); s.hideTitleBarsUntilHover = false
+        XCTAssertFalse(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(s)).hideTitleBarsUntilHover)
+    }
+}

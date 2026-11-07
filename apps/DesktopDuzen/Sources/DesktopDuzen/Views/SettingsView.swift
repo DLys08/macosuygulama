@@ -95,6 +95,7 @@ public struct SettingsView: View {
         Divider()
         sectionTitle("Windows & Spaces")
         Toggle("Show zones on all Spaces", isOn: $appState.settings.showZonesOnAllSpaces)
+        Toggle("Hide zone title bars until the pointer is over a zone", isOn: $appState.settings.hideTitleBarsUntilHover)
         caption("When off, each zone stays on the Space where it was created. Zones never appear over full-screen apps.")
 
         Divider()

@@ -25,8 +25,12 @@ public struct ZoneContentView: View {
 
             ZStack(alignment: .bottomTrailing) {
                 VStack(spacing: 0) {
+                    let hideHeader = appState.settings.hideTitleBarsUntilHover && !zone.isCollapsed && !controller.isPointerInside
                     ZoneHeaderView(zone: zone)
                         .background(palette.isClear ? Color.clear : palette.controlFill.opacity(0.6))
+                        // Hidden until hover; the space is kept so content never jumps.
+                        .opacity(hideHeader ? 0 : 1)
+                        .animation(.easeInOut(duration: 0.15), value: hideHeader)
 
                     if let message = banner ?? store.lastError {
                         bannerView(message, palette: palette)

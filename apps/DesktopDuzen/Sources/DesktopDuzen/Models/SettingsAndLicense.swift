@@ -13,6 +13,8 @@ public struct AppSettings: Codable, Equatable {
     public var globalHotkeyEnabled: Bool
     public var hasCompletedOnboarding: Bool
     public var showHubOnLaunch: Bool
+    /// Zone title bars stay invisible until the pointer is over the zone.
+    public var hideTitleBarsUntilHover: Bool
 
     public init(
         launchAtLogin: Bool = false,
@@ -26,7 +28,8 @@ public struct AppSettings: Codable, Equatable {
         hideLooseDesktopIcons: Bool = false,
         globalHotkeyEnabled: Bool = true,
         hasCompletedOnboarding: Bool = false,
-        showHubOnLaunch: Bool = true
+        showHubOnLaunch: Bool = true,
+        hideTitleBarsUntilHover: Bool = true
     ) {
         self.launchAtLogin = launchAtLogin
         self.alignmentMode = alignmentMode
@@ -40,12 +43,13 @@ public struct AppSettings: Codable, Equatable {
         self.globalHotkeyEnabled = globalHotkeyEnabled
         self.hasCompletedOnboarding = hasCompletedOnboarding
         self.showHubOnLaunch = showHubOnLaunch
+        self.hideTitleBarsUntilHover = hideTitleBarsUntilHover
     }
 
     enum CodingKeys: String, CodingKey {
         case launchAtLogin, alignmentMode, snapToGrid, snapToNeighbors, gridSize, snapThreshold
         case showZonesOnAllSpaces, autoSortEnabled, hideLooseDesktopIcons, globalHotkeyEnabled
-        case hasCompletedOnboarding, showHubOnLaunch
+        case hasCompletedOnboarding, showHubOnLaunch, hideTitleBarsUntilHover
     }
 
     public init(from decoder: Decoder) throws {
@@ -63,6 +67,7 @@ public struct AppSettings: Codable, Equatable {
         globalHotkeyEnabled = c.value(.globalHotkeyEnabled, default: d.globalHotkeyEnabled)
         hasCompletedOnboarding = c.value(.hasCompletedOnboarding, default: d.hasCompletedOnboarding)
         showHubOnLaunch = c.value(.showHubOnLaunch, default: d.showHubOnLaunch)
+        hideTitleBarsUntilHover = c.value(.hideTitleBarsUntilHover, default: d.hideTitleBarsUntilHover)
     }
 }
 

@@ -9,6 +9,8 @@ public final class ZoneController: ObservableObject {
     public let panel: ZonePanel
     public let store: ZoneFileStore
     @Published public var isHoverExpanded = false
+    /// True while the pointer is over the zone (drives auto-hiding title bars).
+    @Published public var isPointerInside = false
     /// Lives here (not in view @State) so no view rebuild can dismiss the style popover.
     @Published public var isStylePickerPresented = false
     var appliedPaletteDark: Bool?
@@ -205,6 +207,15 @@ public final class WindowManager: ObservableObject {
     }
 
     private func handleHover(inside: Bool, controller: ZoneController) {
+        if controller.isPointerInside != inside {
+            if inside {
+                controller.isPointerInside = true
+            } else {
+                // Exits caused by menus or the pointer sitting on the border are ignored.
+                let mouse = NSEvent.mouseLocation
+                if !controller.panel.frame.insetBy(dx: 1, dy: 1).contains(mouse) { controller.isPointerInside = false }
+            }
+        }
         guard let zone = state.zone(id: controller.zoneID), zone.isCollapsed,
               zone.autoExpandOnHover, state.canAutoExpand() else {
             if !inside && controller.isHoverExpanded { controller.isHoverExpanded = false }

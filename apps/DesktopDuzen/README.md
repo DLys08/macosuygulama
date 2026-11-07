@@ -38,6 +38,7 @@ Appearance
 
 Desktop behaviour
 - Zones sit just above the desktop icons, below app windows. Optionally pin a zone above other windows.
+- Title bars stay hidden until the pointer is over a zone (can be turned off in Preferences).
 - Smooth dragging with edge magnetism; grid snapping applies on release. Resize by dragging any edge or corner (no visible handle).
 - Align to Grid snaps every zone to the desktop grid in place; Auto-Align arranges zones in rows on each display.
 - Works across Spaces, sleep/wake and display changes. A zone whose display is disconnected is shown on the main display without losing its saved position.
@@ -52,7 +53,7 @@ Desktop behaviour
 ## Build
 
 ```bash
-swift test                      # 63 tests; they use temporary folders only and never touch your Desktop
+swift test                      # 64 tests; they use temporary folders only and never touch your Desktop
 ./scripts/build_app.sh          # builds and signs DesktopDuzen.app (Developer ID if available, else ad-hoc)
 ./scripts/create_dmg.sh         # packages and verifies DesktopDuzen-<version>.dmg
 swift scripts/make_icon.swift Resources && iconutil -c icns Resources/AppIcon.iconset -o Resources/AppIcon.icns

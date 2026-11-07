@@ -113,6 +113,11 @@ public class MenuBarManager: NSObject, NSMenuDelegate {
         snapItem.state = AppState.shared.settings.alignmentMode ? .on : .off
         menu.addItem(snapItem)
         
+        let hoverTitles = NSMenuItem(title: "Hide Title Bars Until Hover", action: #selector(toggleHoverTitles), keyEquivalent: "")
+        hoverTitles.target = self
+        hoverTitles.state = AppState.shared.settings.hideTitleBarsUntilHover ? .on : .off
+        menu.addItem(hoverTitles)
+        
         let hideZonesTitle = AppState.shared.areAllZonesHidden ? "Show All Zones" : "Hide All Zones"
         let hideZonesItem = NSMenuItem(title: hideZonesTitle, action: #selector(toggleHideAllZones), keyEquivalent: "h")
         hideZonesItem.target = self
@@ -194,6 +199,8 @@ public class MenuBarManager: NSObject, NSMenuDelegate {
     }
     
     @objc private func addSticker() { ZoneActions.addSticker() }
+    
+    @objc private func toggleHoverTitles() { AppState.shared.settings.hideTitleBarsUntilHover.toggle() }
     
     @objc private func alignToGrid() { AppState.shared.alignAllZonesToGrid() }
     
