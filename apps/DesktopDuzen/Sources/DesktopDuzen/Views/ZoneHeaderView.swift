@@ -52,14 +52,6 @@ public struct ZoneHeaderView: View {
                                  help: zone.isPinnedOnTop ? "Unpin (return to desktop level)" : "Keep above other windows",
                                  highlighted: zone.isPinnedOnTop, action: togglePinOnTop)
 
-                    headerButton("paintpalette", help: "Theme, colour and transparency") {
-                        controller.isStylePickerPresented.toggle()
-                    }
-                    .popover(isPresented: $controller.isStylePickerPresented, arrowEdge: .bottom) {
-                        ZoneStylePickerView(zoneID: zone.id)
-                            .environmentObject(appState)
-                    }
-
                     headerButton(zone.isCollapsed ? "chevron.down" : "chevron.up",
                                  help: zone.isCollapsed ? "Expand zone" : "Collapse to title bar", action: toggleCollapse)
 
@@ -77,6 +69,10 @@ public struct ZoneHeaderView: View {
                     .background(palette.controlFill)
                     .clipShape(Circle())
                     .help("More options")
+                    .popover(isPresented: $controller.isStylePickerPresented, arrowEdge: .bottom) {
+                        ZoneStylePickerView(zoneID: zone.id)
+                            .environmentObject(appState)
+                    }
                 }
             }
             .padding(.horizontal, 12)
@@ -111,6 +107,14 @@ public struct ZoneHeaderView: View {
 
     @ViewBuilder
     private var menuContent: some View {
+        Button("Style & Theme…") {
+            // Let the menu finish closing before presenting the popover from its button.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                controller.panel.makeKey()
+                controller.isStylePickerPresented = true
+            }
+        }
+        Divider()
         if zone.type != .app {
             Picker("View", selection: Binding(get: { zone.viewMode }, set: { mode in appState.mutateZone(id: zone.id) { $0.viewMode = mode } })) {
                 Label("Icons", systemImage: "square.grid.3x3").tag(ZoneViewMode.icon)
